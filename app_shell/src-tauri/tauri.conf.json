@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "app_shell",
+  "productName": "paperflow",
   "version": "0.1.0",
   "identifier": "io.github.paperflow.app",
   "build": {
@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "app_shell",
-        "width": 800,
-        "height": 600
+        "title": "PaperFlow",
+        "width": 1024,
+        "height": 720
       }
     ],
     "security": {
