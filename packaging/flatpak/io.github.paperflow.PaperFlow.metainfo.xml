@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.paperflow.PaperFlow</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>PaperFlow</name>
+  <summary>Privacy-first, fully on-device PDF management suite</summary>
+  <description>
+    <p>
+      PaperFlow is a modern, fast, and 100% offline PDF manager for Fedora Linux and Android.
+      Unlike web services that upload sensitive files to remote servers, PaperFlow performs
+      all PDF operations locally on your hardware.
+    </p>
+    <ul>
+      <li>Merge multiple PDFs with custom ordering and page ranges</li>
+      <li>Split PDFs by custom page numbers, intervals, or burst into single pages</li>
+      <li>Visual interactive page organizer to reorder, rotate 90°, and delete pages</li>
+      <li>Smart compression with Extreme, Recommended, and High-Quality presets</li>
+      <li>Convert images (JPG, PNG, WebP) to PDF and rasterize PDFs to high-res images</li>
+      <li>Diagonal text watermark stamps with adjustable opacity and sizing</li>
+      <li>Fast interactive document viewer with zoom and direct printing</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.paperflow.PaperFlow.desktop</launchable>
+  <provides>
+    <mediatype>application/pdf</mediatype>
+  </provides>
+  <categories>
+    <category>Office</category>
+    <category>Utility</category>
+  </categories>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="1.0.0" date="2026-10-26">
+      <description>
+        <p>Initial release of PaperFlow with core offline PDF tools: Merge, Split, Organize, Compress, Image Conversion, and Watermark.</p>
+      </description>
+    </release>
+  </releases>
+</component>
