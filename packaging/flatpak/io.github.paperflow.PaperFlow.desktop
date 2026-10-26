@@ -1,0 +1,26 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=PaperFlow
+GenericName=PDF Manager & Studio
+Comment=Your PDFs. Your device. Nothing uploaded. Fast, private, on-device PDF management.
+Exec=paperflow %U
+Icon=io.github.paperflow.PaperFlow
+Terminal=false
+Categories=Office;Utility;
+MimeType=application/pdf;
+Keywords=PDF;Merge;Split;Compress;Organize;Watermark;Viewer;
+StartupNotify=true
+Actions=Merge;Split;Compress;
+
+[Desktop Action Merge]
+Name=Merge PDFs
+Exec=paperflow --tool=merge
+
+[Desktop Action Split]
+Name=Split PDF
+Exec=paperflow --tool=split
+
+[Desktop Action Compress]
+Name=Compress PDF
+Exec=paperflow --tool=compress
