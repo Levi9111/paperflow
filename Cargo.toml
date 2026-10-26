@@ -3,4 +3,7 @@ members = [
     "crates/paperflow-core",
     "crates/paperflow-cli",
 ]
+exclude = [
+    "app_shell/src-tauri",
+]
 resolver = "2"
