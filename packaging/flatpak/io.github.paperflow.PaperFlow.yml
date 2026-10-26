@@ -1,0 +1,44 @@
+app-id: io.github.paperflow.PaperFlow
+runtime: org.gnome.Platform
+runtime-version: '46'
+sdk: org.gnome.Sdk
+command: paperflow
+
+finish-args:
+  # Display & GPU rendering (Wayland primary, X11 fallback)
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  
+  # File access via XDG desktop portal file choosers
+  - --filesystem=xdg-documents:ro
+  
+  # VERIFIABLE PRIVACY:
+  # Note the deliberate absence of '--share=network'.
+  # Flatpak sandbox completely denies any socket or network access.
+
+modules:
+  - name: paperflow
+    buildsystem: simple
+    build-commands:
+      # Install pre-built native Linux bundle
+      - install -D -m 0755 bundle/paperflow /app/bin/paperflow
+      - cp -r bundle/data /app/bin/data
+      - cp -r bundle/lib /app/bin/lib
+      
+      # Desktop integration & AppStream metainfo
+      - install -D -m 0644 io.github.paperflow.PaperFlow.desktop /app/share/applications/io.github.paperflow.PaperFlow.desktop
+      - install -D -m 0644 io.github.paperflow.PaperFlow.metainfo.xml /app/share/metainfo/io.github.paperflow.PaperFlow.metainfo.xml
+      - install -D -m 0644 logo.png /app/share/icons/hicolor/512x512/apps/io.github.paperflow.PaperFlow.png
+    sources:
+      - type: file
+        path: io.github.paperflow.PaperFlow.desktop
+      - type: file
+        path: io.github.paperflow.PaperFlow.metainfo.xml
+      - type: file
+        path: ../../assets/images/logo.jpg
+        dest-filename: logo.png
+      - type: dir
+        path: ../../build/linux/x64/release/bundle
+        dest: bundle
