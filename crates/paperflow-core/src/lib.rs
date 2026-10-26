@@ -7,6 +7,7 @@ use thiserror::Error;
 
 pub mod metadata;
 pub mod compress;
+pub mod convert;
 
 #[derive(Error, Debug)]
 pub enum CoreError {
