@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "crates/paperflow-core",
+    "crates/paperflow-cli",
+]
+resolver = "2"
