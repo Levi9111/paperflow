@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 use paperflow_core::{JobContext, PaperFlowEngine};
+use paperflow_core::compress::{Compressor, CompressionPreset};
+use paperflow_core::convert::ImageConverter;
+use paperflow_core::metadata::DocumentMetadata;
 
 #[derive(Parser)]
 #[command(name = "paperflow")]
@@ -41,6 +44,29 @@ enum Commands {
         page: u32,
         #[arg(short, long, default_value = "90")]
         delta: i64,
+        #[arg(short, long)]
+        output: PathBuf,
+    },
+    /// Inspect or sanitize document metadata
+    Meta {
+        #[arg(short, long)]
+        input: PathBuf,
+        #[arg(short, long)]
+        strip_to: Option<PathBuf>,
+    },
+    /// Compress document streams
+    Compress {
+        #[arg(short, long)]
+        input: PathBuf,
+        #[arg(short, long)]
+        output: PathBuf,
+        #[arg(short, long, default_value = "recommended")]
+        preset: String,
+    },
+    /// Convert images to a unified PDF document
+    Img2Pdf {
+        #[arg(short, long, num_args = 1..)]
+        images: Vec<PathBuf>,
         #[arg(short, long)]
         output: PathBuf,
     },
@@ -98,6 +124,31 @@ fn main() -> anyhow::Result<()> {
             println!("Rotating page {} by {}° in {}...", page, delta, input.display());
             PaperFlowEngine::rotate_page(&input, page, delta, &output)?;
             println!("Saved rotated PDF to {}", output.display());
+        }
+        Commands::Meta { input, strip_to } => {
+            let meta = DocumentMetadata::read_from_file(&input)?;
+            println!("Metadata for {}:", input.display());
+            println!("  Title: {:?}", meta.title);
+            println!("  Author: {:?}", meta.author);
+            println!("  Producer: {:?}", meta.producer);
+            if let Some(clean_out) = strip_to {
+                DocumentMetadata::sanitize_and_save(&input, &clean_out)?;
+                println!("Sanitized (stripped) metadata saved to {}", clean_out.display());
+            }
+        }
+        Commands::Compress { input, output, preset } => {
+            let p = match preset.to_lowercase().as_str() {
+                "extreme" => CompressionPreset::Extreme,
+                "high" => CompressionPreset::HighQuality,
+                _ => CompressionPreset::Recommended,
+            };
+            let (orig, compressed) = Compressor::compress_file(&input, &output, p, &ctx)?;
+            println!("Compressed {} ({} bytes) -> {} ({} bytes)", input.display(), orig, output.display(), compressed);
+        }
+        Commands::Img2Pdf { images, output } => {
+            println!("Converting {} images into {}...", images.len(), output.display());
+            let count = ImageConverter::image_to_pdf(&images, &output)?;
+            println!("Successfully generated PDF with {} pages at {}", count, output.display());
         }
     }
 
