@@ -6,6 +6,7 @@ use lopdf::{Document, Object};
 use thiserror::Error;
 
 pub mod metadata;
+pub mod compress;
 
 #[derive(Error, Debug)]
 pub enum CoreError {
