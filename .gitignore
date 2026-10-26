@@ -1,0 +1,30 @@
+# Rust / Cargo
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Node / Web / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Tauri
+app_shell/src-tauri/target/
+
+# Build artifacts & temp
+.paperflow_temp/
+*.pdf
+archive_flutter/build/
+.dart_tool/
+
+# IDE & Metadata
+.idea/
+*.iml
+.metadata
+.flutter-plugins*
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
