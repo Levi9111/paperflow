@@ -5,6 +5,8 @@ use std::sync::Arc;
 use lopdf::{Document, Object};
 use thiserror::Error;
 
+pub mod metadata;
+
 #[derive(Error, Debug)]
 pub enum CoreError {
     #[error("IO error: {0}")]
