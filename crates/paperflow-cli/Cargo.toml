@@ -1,0 +1,10 @@
+[package]
+name = "paperflow-cli"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+paperflow-core = { path = "../paperflow-core" }
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
