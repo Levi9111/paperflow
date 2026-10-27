@@ -1,411 +1,1175 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { open } from "@tauri-apps/plugin-dialog";
+import { DropZone } from "./components/DropZone";
+import { DocumentCard } from "./components/DocumentCard";
+import { DocumentQueue } from "./components/DocumentQueue";
+import { DestinationSelector } from "./components/DestinationSelector";
+import { ResultModal } from "./components/ResultModal";
+import { DocDetails, CompressDetails, DocumentMetadata, ToolType } from "./types/pdf";
+import { formatBytes, getDefaultOutputPath } from "./utils/format";
 import "./App.css";
-
-type ToolType = "merge" | "split" | "rotate" | "info";
 
 export default function App() {
   const [activeTool, setActiveTool] = useState<ToolType>("merge");
 
+  // Global window drag state
+  const [isWindowDragging, setIsWindowDragging] = useState(false);
+
   // Merge state
-  const [mergeInputs, setMergeInputs] = useState<string[]>([]);
-  const [newMergePath, setNewMergePath] = useState("");
+  const [mergeDocs, setMergeDocs] = useState<DocDetails[]>([]);
   const [mergeOutput, setMergeOutput] = useState("");
 
   // Split state
-  const [splitInput, setSplitInput] = useState("");
-  const [splitRanges, setSplitRanges] = useState("1-3");
+  const [splitDoc, setSplitDoc] = useState<DocDetails | null>(null);
+  const [splitMode, setSplitMode] = useState<"range" | "custom">("range");
+  const [splitStartPage, setSplitStartPage] = useState(1);
+  const [splitEndPage, setSplitEndPage] = useState(1);
+  const [splitCustomRange, setSplitCustomRange] = useState("1-2");
   const [splitOutput, setSplitOutput] = useState("");
 
   // Rotate state
-  const [rotateInput, setRotateInput] = useState("");
-  const [rotatePage, setRotatePage] = useState(1);
+  const [rotateDoc, setRotateDoc] = useState<DocDetails | null>(null);
   const [rotateDelta, setRotateDelta] = useState(90);
+  const [rotateAll, setRotateAll] = useState(true);
+  const [rotateTargetPage, setRotateTargetPage] = useState(1);
   const [rotateOutput, setRotateOutput] = useState("");
 
-  // Info state
-  const [infoInput, setInfoInput] = useState("");
-  const [infoPages, setInfoPages] = useState<number | null>(null);
+  // Compress state
+  const [compressDoc, setCompressDoc] = useState<DocDetails | null>(null);
+  const [compressPreset, setCompressPreset] = useState<"extreme" | "recommended" | "high">("recommended");
+  const [compressOutput, setCompressOutput] = useState("");
+  const [compressResult, setCompressResult] = useState<CompressDetails | null>(null);
 
-  // Status & Feedback
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [isError, setIsError] = useState(false);
+  // Images to PDF state
+  const [imagePaths, setImagePaths] = useState<string[]>([]);
+  const [imgOutput, setImgOutput] = useState("");
+
+  // Inspect & Sanitize state
+  const [inspectDoc, setInspectDoc] = useState<DocDetails | null>(null);
+  const [inspectMeta, setInspectMeta] = useState<DocumentMetadata | null>(null);
+  const [sanitizeOutput, setSanitizeOutput] = useState("");
+
+  // Processing & Modal state
   const [isProcessing, setIsProcessing] = useState(false);
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    outputPath?: string;
+    isError?: boolean;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+  });
 
-  const handleAddMergeFile = () => {
-    if (newMergePath.trim()) {
-      setMergeInputs([...mergeInputs, newMergePath.trim()]);
-      setNewMergePath("");
+  // Query document details helper
+  const loadDocDetails = async (path: string): Promise<DocDetails> => {
+    try {
+      return await invoke<DocDetails>("get_doc_details", { path });
+    } catch {
+      const filename = path.replace(/\\/g, "/").split("/").pop() || "document.pdf";
+      return {
+        path,
+        filename,
+        page_count: 1,
+        file_size: 0,
+      };
     }
   };
 
-  const handleRemoveMergeFile = (index: number) => {
-    setMergeInputs(mergeInputs.filter((_, i) => i !== index));
+  // Handle paths dropped via native window drag or dropzone
+  const handleIncomingPaths = async (paths: string[]) => {
+    if (!paths || paths.length === 0) return;
+
+    if (activeTool === "merge") {
+      const pdfs = paths.filter((p) => p.toLowerCase().endsWith(".pdf"));
+      if (pdfs.length === 0) return;
+      const loaded = await Promise.all(pdfs.map(loadDocDetails));
+      setMergeDocs((prev) => {
+        const next = [...prev, ...loaded];
+        if (!mergeOutput && next.length > 0) {
+          setMergeOutput(getDefaultOutputPath(next[0].path, "merged"));
+        }
+        return next;
+      });
+    } else if (activeTool === "split") {
+      const pdf = paths.find((p) => p.toLowerCase().endsWith(".pdf"));
+      if (!pdf) return;
+      const details = await loadDocDetails(pdf);
+      setSplitDoc(details);
+      setSplitStartPage(1);
+      setSplitEndPage(Math.min(details.page_count, 3));
+      setSplitOutput(getDefaultOutputPath(details.path, "split"));
+    } else if (activeTool === "rotate") {
+      const pdf = paths.find((p) => p.toLowerCase().endsWith(".pdf"));
+      if (!pdf) return;
+      const details = await loadDocDetails(pdf);
+      setRotateDoc(details);
+      setRotateTargetPage(1);
+      setRotateOutput(getDefaultOutputPath(details.path, "rotated"));
+    } else if (activeTool === "compress") {
+      const pdf = paths.find((p) => p.toLowerCase().endsWith(".pdf"));
+      if (!pdf) return;
+      const details = await loadDocDetails(pdf);
+      setCompressDoc(details);
+      setCompressResult(null);
+      setCompressOutput(getDefaultOutputPath(details.path, "compressed"));
+    } else if (activeTool === "img2pdf") {
+      const validImages = paths.filter((p) => {
+        const lower = p.toLowerCase();
+        return (
+          lower.endsWith(".png") ||
+          lower.endsWith(".jpg") ||
+          lower.endsWith(".jpeg") ||
+          lower.endsWith(".webp")
+        );
+      });
+      if (validImages.length === 0) return;
+      setImagePaths((prev) => {
+        const next = [...prev, ...validImages];
+        if (!imgOutput && next.length > 0) {
+          setImgOutput(getDefaultOutputPath(next[0], "converted"));
+        }
+        return next;
+      });
+    } else if (activeTool === "inspect") {
+      const pdf = paths.find((p) => p.toLowerCase().endsWith(".pdf"));
+      if (!pdf) return;
+      const details = await loadDocDetails(pdf);
+      setInspectDoc(details);
+      setSanitizeOutput(getDefaultOutputPath(details.path, "sanitized"));
+      try {
+        const meta = await invoke<DocumentMetadata>("get_metadata", { input: details.path });
+        setInspectMeta(meta);
+      } catch (e) {
+        console.error("Failed to read metadata:", e);
+      }
+    }
   };
 
+  // Listen to window-level native file drop events from Tauri
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    try {
+      getCurrentWebview()
+        .onDragDropEvent((event) => {
+          if (event.payload.type === "over" || event.payload.type === "enter") {
+            setIsWindowDragging(true);
+          } else if (event.payload.type === "leave") {
+            setIsWindowDragging(false);
+          } else if (event.payload.type === "drop") {
+            setIsWindowDragging(false);
+            if (event.payload.paths && event.payload.paths.length > 0) {
+              handleIncomingPaths(event.payload.paths);
+            }
+          }
+        })
+        .then((fn) => {
+          unlisten = fn;
+        });
+    } catch (e) {
+      console.warn("Tauri drag-drop listener not supported in browser environment:", e);
+    }
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [activeTool, mergeOutput, imgOutput]);
+
+  // Execute Merge
   const executeMerge = async () => {
-    if (mergeInputs.length < 2 || !mergeOutput.trim()) {
-      setStatusMessage("Please specify at least 2 input files and an output file path.");
-      setIsError(true);
+    if (mergeDocs.length < 2) {
+      setModalState({
+        isOpen: true,
+        title: "More Files Needed",
+        message: "Please add at least 2 PDF documents to merge.",
+        isError: true,
+      });
       return;
     }
+    const targetOut = mergeOutput || getDefaultOutputPath(mergeDocs[0].path, "merged");
     setIsProcessing(true);
-    setStatusMessage(null);
     try {
       const pageCount = await invoke<number>("pdf_merge", {
-        inputs: mergeInputs,
-        output: mergeOutput.trim(),
+        inputs: mergeDocs.map((d) => d.path),
+        output: targetOut,
       });
-      setStatusMessage(`Success! Merged ${pageCount} pages into: ${mergeOutput}`);
-      setIsError(false);
+      setModalState({
+        isOpen: true,
+        title: "Merge Complete!",
+        message: `Successfully combined ${mergeDocs.length} documents (${pageCount} total pages) into a unified PDF.`,
+        outputPath: targetOut,
+        isError: false,
+      });
     } catch (err: any) {
-      setStatusMessage(`Error merging files: ${err}`);
-      setIsError(true);
+      setModalState({
+        isOpen: true,
+        title: "Merge Failed",
+        message: String(err),
+        isError: true,
+      });
     } finally {
       setIsProcessing(false);
     }
   };
 
+  // Execute Split
   const executeSplit = async () => {
-    if (!splitInput.trim() || !splitRanges.trim() || !splitOutput.trim()) {
-      setStatusMessage("Please specify input file, page ranges, and output path.");
-      setIsError(true);
-      return;
-    }
+    if (!splitDoc) return;
+    const targetOut = splitOutput || getDefaultOutputPath(splitDoc.path, "split");
+    const rangeString =
+      splitMode === "range" ? `${splitStartPage}-${splitEndPage}` : splitCustomRange;
+
     setIsProcessing(true);
-    setStatusMessage(null);
     try {
       const pageCount = await invoke<number>("pdf_split", {
-        input: splitInput.trim(),
-        ranges: splitRanges.trim(),
-        output: splitOutput.trim(),
+        input: splitDoc.path,
+        ranges: rangeString,
+        output: targetOut,
       });
-      setStatusMessage(`Success! Saved ${pageCount} extracted pages to: ${splitOutput}`);
-      setIsError(false);
+      setModalState({
+        isOpen: true,
+        title: "Split Complete!",
+        message: `Extracted ${pageCount} pages (${rangeString}) into your new PDF document.`,
+        outputPath: targetOut,
+        isError: false,
+      });
     } catch (err: any) {
-      setStatusMessage(`Error splitting file: ${err}`);
-      setIsError(true);
+      setModalState({
+        isOpen: true,
+        title: "Split Failed",
+        message: String(err),
+        isError: true,
+      });
     } finally {
       setIsProcessing(false);
     }
   };
 
+  // Execute Rotate
   const executeRotate = async () => {
-    if (!rotateInput.trim() || !rotateOutput.trim()) {
-      setStatusMessage("Please specify input file and output path.");
-      setIsError(true);
-      return;
-    }
+    if (!rotateDoc) return;
+    const targetOut = rotateOutput || getDefaultOutputPath(rotateDoc.path, "rotated");
     setIsProcessing(true);
-    setStatusMessage(null);
     try {
       await invoke("pdf_rotate", {
-        input: rotateInput.trim(),
-        page: Number(rotatePage),
-        delta: Number(rotateDelta),
-        output: rotateOutput.trim(),
+        input: rotateDoc.path,
+        page: rotateAll ? null : rotateTargetPage,
+        delta: rotateDelta,
+        output: targetOut,
       });
-      setStatusMessage(`Success! Rotated page ${rotatePage} by ${rotateDelta}° and saved to: ${rotateOutput}`);
-      setIsError(false);
+      setModalState({
+        isOpen: true,
+        title: "Rotation Complete!",
+        message: `Rotated ${rotateAll ? "all pages" : `page ${rotateTargetPage}`} by ${rotateDelta}° clockwise.`,
+        outputPath: targetOut,
+        isError: false,
+      });
     } catch (err: any) {
-      setStatusMessage(`Error rotating page: ${err}`);
-      setIsError(true);
+      setModalState({
+        isOpen: true,
+        title: "Rotation Failed",
+        message: String(err),
+        isError: true,
+      });
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const executeInfo = async () => {
-    if (!infoInput.trim()) {
-      setStatusMessage("Please enter a PDF file path.");
-      setIsError(true);
-      return;
-    }
+  // Execute Compress
+  const executeCompress = async () => {
+    if (!compressDoc) return;
+    const targetOut = compressOutput || getDefaultOutputPath(compressDoc.path, "compressed");
     setIsProcessing(true);
-    setStatusMessage(null);
     try {
-      const pages = await invoke<number>("pdf_info", { path: infoInput.trim() });
-      setInfoPages(pages);
-      setStatusMessage(`Document valid: ${pages} total pages detected.`);
-      setIsError(false);
+      const result = await invoke<CompressDetails>("pdf_compress", {
+        input: compressDoc.path,
+        preset: compressPreset,
+        output: targetOut,
+      });
+      setCompressResult(result);
+      setModalState({
+        isOpen: true,
+        title: "Compression Successful!",
+        message: `Reduced file size by ${result.ratio_percent.toFixed(1)}% (${formatBytes(result.original_size)} → ${formatBytes(result.compressed_size)}).`,
+        outputPath: targetOut,
+        isError: false,
+      });
     } catch (err: any) {
-      setStatusMessage(`Error inspecting document: ${err}`);
-      setIsError(true);
-      setInfoPages(null);
+      setModalState({
+        isOpen: true,
+        title: "Compression Failed",
+        message: String(err),
+        isError: true,
+      });
     } finally {
       setIsProcessing(false);
     }
   };
+
+  // Execute Images to PDF
+  const executeImg2Pdf = async () => {
+    if (imagePaths.length === 0) return;
+    const targetOut = imgOutput || getDefaultOutputPath(imagePaths[0], "converted");
+    setIsProcessing(true);
+    try {
+      const pageCount = await invoke<number>("pdf_img2pdf", {
+        inputs: imagePaths,
+        output: targetOut,
+      });
+      setModalState({
+        isOpen: true,
+        title: "Images Converted!",
+        message: `Generated a high-resolution ${pageCount}-page PDF document from ${imagePaths.length} images.`,
+        outputPath: targetOut,
+        isError: false,
+      });
+    } catch (err: any) {
+      setModalState({
+        isOpen: true,
+        title: "Conversion Failed",
+        message: String(err),
+        isError: true,
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Execute Sanitize Metadata
+  const executeSanitize = async () => {
+    if (!inspectDoc) return;
+    const targetOut = sanitizeOutput || getDefaultOutputPath(inspectDoc.path, "sanitized");
+    setIsProcessing(true);
+    try {
+      await invoke("pdf_sanitize_meta", {
+        input: inspectDoc.path,
+        output: targetOut,
+      });
+      setModalState({
+        isOpen: true,
+        title: "Metadata Stripped & Sanitized!",
+        message: "Successfully removed all tracking markers, author signatures, and software fingerprints.",
+        outputPath: targetOut,
+        isError: false,
+      });
+    } catch (err: any) {
+      setModalState({
+        isOpen: true,
+        title: "Sanitize Failed",
+        message: String(err),
+        isError: true,
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Navigation tabs config
+  const tools: { id: ToolType; label: string; icon: React.ReactNode; badge?: string }[] = [
+    {
+      id: "merge",
+      label: "Merge PDFs",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="m8 3 4 8 5-5 5 15H2L8 3z" />
+        </svg>
+      ),
+    },
+    {
+      id: "split",
+      label: "Split PDF",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="6" cy="6" r="3" />
+          <path d="M8.12 8.12 12 12" />
+          <path d="M20 4 8.12 15.88" />
+          <circle cx="6" cy="18" r="3" />
+          <path d="M14.8 14.8 20 20" />
+        </svg>
+      ),
+    },
+    {
+      id: "rotate",
+      label: "Rotate Pages",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+        </svg>
+      ),
+    },
+    {
+      id: "compress",
+      label: "Compress PDF",
+      badge: "Core",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="m14 12-4-4-4 4" />
+          <path d="M10 8v12" />
+          <rect width="20" height="5" x="2" y="2" rx="2" />
+          <rect width="20" height="5" x="2" y="17" rx="2" />
+        </svg>
+      ),
+    },
+    {
+      id: "img2pdf",
+      label: "Images to PDF",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+          <circle cx="9" cy="9" r="2" />
+          <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+        </svg>
+      ),
+    },
+    {
+      id: "inspect",
+      label: "Inspect & Sanitize",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
+          <path d="m9 12 2 2 4-4" />
+        </svg>
+      ),
+    },
+  ];
 
   return (
-    <div className="app-layout">
+    <div className={`app-shell ${isWindowDragging ? "window-drag-active" : ""}`}>
+      {/* Window-wide drag overlay */}
+      {isWindowDragging && (
+        <div className="global-drag-overlay">
+          <div className="drag-overlay-box">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+              <path d="M12 12v9" />
+              <path d="m8 16 4-4 4 4" />
+            </svg>
+            <h2>Drop to Load Files into PaperFlow</h2>
+            <p>100% on-device processing • No data ever leaves your computer</p>
+          </div>
+        </div>
+      )}
+
       {/* Sidebar Navigation */}
       <aside className="sidebar">
-        <div className="brand">
-          <img src="/logo.jpg" alt="PaperFlow Logo" className="brand-logo-img" />
-          <div>
-            <div className="brand-title">PaperFlow</div>
-            <div className="brand-subtitle">RUST CORE • 100% OFFLINE</div>
+        <div className="sidebar-brand">
+          <img src="/logo.jpg" alt="PaperFlow Logo" className="brand-logo" />
+          <div className="brand-text">
+            <h1 className="brand-name">PaperFlow</h1>
+            <span className="brand-badge">RUST CORE • 100% OFFLINE</span>
           </div>
         </div>
 
-        <nav className="nav-menu">
-          <button
-            className={`nav-btn ${activeTool === "merge" ? "active" : ""}`}
-            onClick={() => { setActiveTool("merge"); setStatusMessage(null); }}
-          >
-            <span>⚯</span> Merge PDFs
-          </button>
-          <button
-            className={`nav-btn ${activeTool === "split" ? "active" : ""}`}
-            onClick={() => { setActiveTool("split"); setStatusMessage(null); }}
-          >
-            <span>✂</span> Split PDF
-          </button>
-          <button
-            className={`nav-btn ${activeTool === "rotate" ? "active" : ""}`}
-            onClick={() => { setActiveTool("rotate"); setStatusMessage(null); }}
-          >
-            <span>↻</span> Rotate Pages
-          </button>
-          <button
-            className={`nav-btn ${activeTool === "info" ? "active" : ""}`}
-            onClick={() => { setActiveTool("info"); setStatusMessage(null); }}
-          >
-            <span>ℹ</span> Document Info
-          </button>
+        <nav className="sidebar-nav">
+          <div className="nav-group-label">PDF Studio Tools</div>
+          {tools.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={`nav-item ${activeTool === t.id ? "active" : ""}`}
+              onClick={() => setActiveTool(t.id)}
+            >
+              <span className="nav-icon">{t.icon}</span>
+              <span className="nav-label">{t.label}</span>
+              {t.badge && <span className="nav-chip">{t.badge}</span>}
+            </button>
+          ))}
         </nav>
 
         <div className="sidebar-footer">
-          <div>Target: Fedora Linux & Android</div>
-          <div style={{ marginTop: "4px", color: "#10ac84" }}>● Sandbox Network Disabled</div>
+          <div className="privacy-card">
+            <div className="privacy-indicator">
+              <span className="status-dot online" />
+              <span className="privacy-text">Verifiable Local Privacy</span>
+            </div>
+            <p className="privacy-desc">Network sandbox active. No analytics, tracking, or cloud uploads.</p>
+          </div>
         </div>
       </aside>
 
-      {/* Main Workspace */}
-      <main className="main-content">
-        <div className="hero-banner">
-          <div className="privacy-badge">🔒 ZERO REMOTE UPLOADS • VERIFIABLE PRIVACY</div>
-          <h1 className="hero-title">High-Performance Native PDF Studio</h1>
-          <p className="hero-desc">
-            Powered by <code>paperflow-core</code> pure-Rust manipulation engine. Non-destructive, fast, and completely private on Fedora Linux and Android.
-          </p>
-        </div>
+      {/* Main Workspace Area */}
+      <main className="workspace">
+        {/* Top Header */}
+        <header className="workspace-header">
+          <div className="header-titles">
+            <h2 className="tool-title">
+              {tools.find((t) => t.id === activeTool)?.label}
+            </h2>
+            <p className="tool-description">
+              {activeTool === "merge" &&
+                "Drag & drop multiple PDFs to combine them into one seamless document with automatic deduplication."}
+              {activeTool === "split" &&
+                "Extract specific page ranges or create custom splits instantly without re-encoding."}
+              {activeTool === "rotate" &&
+                "Visually rotate individual pages or entire documents with real-time preview."}
+              {activeTool === "compress" &&
+                "Shrink document file size with pure Rust stream compression and font deduplication."}
+              {activeTool === "img2pdf" &&
+                "Combine PNG, JPG, or WebP images into a single professional PDF document."}
+              {activeTool === "inspect" &&
+                "Inspect document structure, verify metadata, and strip sensitive tracking tags."}
+            </p>
+          </div>
+          <div className="header-privacy-badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            Zero Cloud Uploads
+          </div>
+        </header>
 
-        {/* Merge Tool */}
-        {activeTool === "merge" && (
-          <div className="tool-pane">
-            <div className="tool-header">
-              <h2 className="tool-title">Merge Multiple PDFs</h2>
-              <p className="tool-desc">Combine PDF documents in any sequential order with object deduplication.</p>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Add PDF file path:</label>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <input
-                  type="text"
-                  className="text-input"
-                  placeholder="/home/user/Documents/report.pdf"
-                  value={newMergePath}
-                  onChange={(e) => setNewMergePath(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddMergeFile()}
+        {/* Dynamic Tool Content */}
+        <section className="tool-canvas">
+          {/* ================= MERGE TOOL ================= */}
+          {activeTool === "merge" && (
+            <div className="tool-card-view">
+              {mergeDocs.length === 0 ? (
+                <DropZone
+                  multiple
+                  title="Drag & drop PDF files to merge"
+                  subtitle="Drop multiple documents here or click to browse"
+                  onFilesSelected={handleIncomingPaths}
                 />
-                <button className="action-btn" style={{ padding: "10px 20px" }} onClick={handleAddMergeFile}>
-                  Add
-                </button>
-              </div>
-            </div>
+              ) : (
+                <div className="tool-active-pane">
+                  <DocumentQueue
+                    documents={mergeDocs}
+                    onRemove={(idx) => {
+                      const next = mergeDocs.filter((_, i) => i !== idx);
+                      setMergeDocs(next);
+                      if (next.length === 0) setMergeOutput("");
+                    }}
+                    onMoveUp={(idx) => {
+                      if (idx === 0) return;
+                      const next = [...mergeDocs];
+                      const temp = next[idx - 1];
+                      next[idx - 1] = next[idx];
+                      next[idx] = temp;
+                      setMergeDocs(next);
+                    }}
+                    onMoveDown={(idx) => {
+                      if (idx === mergeDocs.length - 1) return;
+                      const next = [...mergeDocs];
+                      const temp = next[idx + 1];
+                      next[idx + 1] = next[idx];
+                      next[idx] = temp;
+                      setMergeDocs(next);
+                    }}
+                    onAddMore={async () => {
+                      const selected = await open({
+                        multiple: true,
+                        filters: [{ name: "PDF files", extensions: ["pdf"] }],
+                      });
+                      if (selected) {
+                        const paths = Array.isArray(selected) ? selected : [selected];
+                        handleIncomingPaths(paths);
+                      }
+                    }}
+                    onClear={() => {
+                      setMergeDocs([]);
+                      setMergeOutput("");
+                    }}
+                  />
 
-            {mergeInputs.length > 0 && (
-              <div className="file-list">
-                {mergeInputs.map((path, idx) => (
-                  <div key={idx} className="file-item">
-                    <span><strong>{idx + 1}.</strong> {path}</span>
-                    <button className="file-remove-btn" onClick={() => handleRemoveMergeFile(idx)}>Remove</button>
+                  <DestinationSelector
+                    outputPath={mergeOutput}
+                    defaultFilename="merged_document.pdf"
+                    onChange={setMergeOutput}
+                  />
+
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="btn-primary-action"
+                      disabled={isProcessing || mergeDocs.length < 2}
+                      onClick={executeMerge}
+                    >
+                      {isProcessing ? (
+                        <span className="spinner-label">
+                          <span className="spinner" /> Merging Documents...
+                        </span>
+                      ) : (
+                        `Merge ${mergeDocs.length} PDFs`
+                      )}
+                    </button>
                   </div>
-                ))}
-              </div>
-            )}
-
-            <div className="form-group">
-              <label className="form-label">Output file destination:</label>
-              <input
-                type="text"
-                className="text-input"
-                placeholder="/home/user/Documents/merged_output.pdf"
-                value={mergeOutput}
-                onChange={(e) => setMergeOutput(e.target.value)}
-              />
+                </div>
+              )}
             </div>
+          )}
 
-            <button
-              className="action-btn"
-              disabled={isProcessing || mergeInputs.length < 2 || !mergeOutput.trim()}
-              onClick={executeMerge}
-            >
-              {isProcessing ? "Merging in Rust Core..." : `Merge ${mergeInputs.length} PDFs`}
-            </button>
-          </div>
-        )}
-
-        {/* Split Tool */}
-        {activeTool === "split" && (
-          <div className="tool-pane">
-            <div className="tool-header">
-              <h2 className="tool-title">Split Document by Pages</h2>
-              <p className="tool-desc">Extract specific page sequences or intervals non-destructively.</p>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Source PDF file path:</label>
-              <input
-                type="text"
-                className="text-input"
-                placeholder="/home/user/Documents/source.pdf"
-                value={splitInput}
-                onChange={(e) => setSplitInput(e.target.value)}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Page Ranges to Extract (e.g. 1-3, 5, 8-10):</label>
-              <input
-                type="text"
-                className="text-input"
-                placeholder="1-3, 5"
-                value={splitRanges}
-                onChange={(e) => setSplitRanges(e.target.value)}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Output destination path:</label>
-              <input
-                type="text"
-                className="text-input"
-                placeholder="/home/user/Documents/extracted_pages.pdf"
-                value={splitOutput}
-                onChange={(e) => setSplitOutput(e.target.value)}
-              />
-            </div>
-
-            <button
-              className="action-btn"
-              disabled={isProcessing || !splitInput.trim() || !splitOutput.trim()}
-              onClick={executeSplit}
-            >
-              {isProcessing ? "Extracting Pages..." : "Split & Save PDF"}
-            </button>
-          </div>
-        )}
-
-        {/* Rotate Tool */}
-        {activeTool === "rotate" && (
-          <div className="tool-pane">
-            <div className="tool-header">
-              <h2 className="tool-title">Rotate Document Pages</h2>
-              <p className="tool-desc">Adjust orientation of specific pages by 90°, 180°, or 270°.</p>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Source PDF file path:</label>
-              <input
-                type="text"
-                className="text-input"
-                placeholder="/home/user/Documents/document.pdf"
-                value={rotateInput}
-                onChange={(e) => setRotateInput(e.target.value)}
-              />
-            </div>
-
-            <div style={{ display: "flex", gap: "16px", marginBottom: "20px" }}>
-              <div style={{ flex: 1 }}>
-                <label className="form-label">Page Number (1-based):</label>
-                <input
-                  type="number"
-                  min="1"
-                  className="text-input"
-                  value={rotatePage}
-                  onChange={(e) => setRotatePage(Number(e.target.value))}
+          {/* ================= SPLIT TOOL ================= */}
+          {activeTool === "split" && (
+            <div className="tool-card-view">
+              {!splitDoc ? (
+                <DropZone
+                  multiple={false}
+                  title="Drag & drop a PDF file to split"
+                  subtitle="Extract pages, split ranges, or isolate chapters"
+                  onFilesSelected={handleIncomingPaths}
                 />
-              </div>
+              ) : (
+                <div className="tool-active-pane">
+                  <DocumentCard
+                    doc={splitDoc}
+                    onRemove={() => setSplitDoc(null)}
+                    onChangeFile={async () => {
+                      const selected = await open({
+                        multiple: false,
+                        filters: [{ name: "PDF files", extensions: ["pdf"] }],
+                      });
+                      if (selected && typeof selected === "string") {
+                        handleIncomingPaths([selected]);
+                      }
+                    }}
+                  />
 
-              <div style={{ flex: 1 }}>
-                <label className="form-label">Rotation Angle:</label>
-                <select
-                  className="text-input"
-                  value={rotateDelta}
-                  onChange={(e) => setRotateDelta(Number(e.target.value))}
-                >
-                  <option value={90}>90° Clockwise</option>
-                  <option value={180}>180° Flip</option>
-                  <option value={270}>270° Counter-Clockwise</option>
-                </select>
-              </div>
+                  <div className="options-panel">
+                    <h4 className="panel-title">Split Configuration</h4>
+                    <div className="mode-toggle-group">
+                      <button
+                        type="button"
+                        className={`mode-toggle-btn ${splitMode === "range" ? "active" : ""}`}
+                        onClick={() => setSplitMode("range")}
+                      >
+                        Sequential Range
+                      </button>
+                      <button
+                        type="button"
+                        className={`mode-toggle-btn ${splitMode === "custom" ? "active" : ""}`}
+                        onClick={() => setSplitMode("custom")}
+                      >
+                        Custom Page List
+                      </button>
+                    </div>
+
+                    {splitMode === "range" ? (
+                      <div className="range-controls-row">
+                        <div className="input-group">
+                          <label className="field-label">Start Page</label>
+                          <input
+                            type="number"
+                            className="input-number"
+                            min={1}
+                            max={splitDoc.page_count}
+                            value={splitStartPage}
+                            onChange={(e) =>
+                              setSplitStartPage(Math.max(1, parseInt(e.target.value) || 1))
+                            }
+                          />
+                        </div>
+                        <div className="range-divider">to</div>
+                        <div className="input-group">
+                          <label className="field-label">End Page</label>
+                          <input
+                            type="number"
+                            className="input-number"
+                            min={splitStartPage}
+                            max={splitDoc.page_count}
+                            value={splitEndPage}
+                            onChange={(e) =>
+                              setSplitEndPage(
+                                Math.min(
+                                  splitDoc.page_count,
+                                  Math.max(splitStartPage, parseInt(e.target.value) || 1)
+                                )
+                              )
+                            }
+                          />
+                        </div>
+                        <span className="range-hint">
+                          (Extracting {Math.max(0, splitEndPage - splitStartPage + 1)} of{" "}
+                          {splitDoc.page_count} pages)
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="input-group">
+                        <label className="field-label">
+                          Page numbers and ranges (e.g., 1-3, 5, 8-10)
+                        </label>
+                        <input
+                          type="text"
+                          className="input-text"
+                          value={splitCustomRange}
+                          onChange={(e) => setSplitCustomRange(e.target.value)}
+                          placeholder="e.g. 1-3, 5, 8"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <DestinationSelector
+                    outputPath={splitOutput}
+                    defaultFilename={`${splitDoc.filename.replace(/\.pdf$/i, "")}_split.pdf`}
+                    onChange={setSplitOutput}
+                  />
+
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="btn-primary-action"
+                      disabled={isProcessing}
+                      onClick={executeSplit}
+                    >
+                      {isProcessing ? (
+                        <span className="spinner-label">
+                          <span className="spinner" /> Extracting Pages...
+                        </span>
+                      ) : (
+                        "Extract & Save Pages"
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+          )}
 
-            <div className="form-group">
-              <label className="form-label">Output destination path:</label>
-              <input
-                type="text"
-                className="text-input"
-                placeholder="/home/user/Documents/rotated_output.pdf"
-                value={rotateOutput}
-                onChange={(e) => setRotateOutput(e.target.value)}
-              />
-            </div>
-
-            <button
-              className="action-btn"
-              disabled={isProcessing || !rotateInput.trim() || !rotateOutput.trim()}
-              onClick={executeRotate}
-            >
-              {isProcessing ? "Applying Rotation..." : "Rotate & Save"}
-            </button>
-          </div>
-        )}
-
-        {/* Info Tool */}
-        {activeTool === "info" && (
-          <div className="tool-pane">
-            <div className="tool-header">
-              <h2 className="tool-title">Inspect PDF Metadata & Pages</h2>
-              <p className="tool-desc">Verify structural integrity and retrieve page counts.</p>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Target PDF file path:</label>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <input
-                  type="text"
-                  className="text-input"
-                  placeholder="/home/user/Documents/sample.pdf"
-                  value={infoInput}
-                  onChange={(e) => setInfoInput(e.target.value)}
+          {/* ================= ROTATE TOOL ================= */}
+          {activeTool === "rotate" && (
+            <div className="tool-card-view">
+              {!rotateDoc ? (
+                <DropZone
+                  multiple={false}
+                  title="Drag & drop a PDF file to rotate"
+                  subtitle="Change orientation of upside-down or sideways scans"
+                  onFilesSelected={handleIncomingPaths}
                 />
-                <button className="action-btn" style={{ padding: "10px 24px" }} onClick={executeInfo}>
-                  Inspect
-                </button>
-              </div>
+              ) : (
+                <div className="tool-active-pane">
+                  <DocumentCard
+                    doc={rotateDoc}
+                    onRemove={() => setRotateDoc(null)}
+                  />
+
+                  <div className="rotate-interactive-stage">
+                    {/* Visual Animated Preview Card */}
+                    <div className="rotate-preview-container">
+                      <div
+                        className="rotate-preview-sheet"
+                        style={{
+                          transform: `rotate(${rotateDelta}deg)`,
+                          transition: "transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)",
+                        }}
+                      >
+                        <div className="sheet-header">
+                          <span className="sheet-pill" />
+                          <span className="sheet-stamp">TOP</span>
+                        </div>
+                        <div className="sheet-lines">
+                          <div className="sheet-line long" />
+                          <div className="sheet-line med" />
+                          <div className="sheet-line short" />
+                        </div>
+                        <div className="sheet-footer">
+                          <span>PaperFlow Scan Preview</span>
+                        </div>
+                      </div>
+                      <span className="rotate-angle-badge">{rotateDelta}° Clockwise</span>
+                    </div>
+
+                    {/* Rotation Controls */}
+                    <div className="rotate-controls-column">
+                      <label className="field-label">Select Rotation Angle</label>
+                      <div className="rotate-angle-buttons">
+                        <button
+                          type="button"
+                          className={`btn-angle ${rotateDelta === 90 ? "active" : ""}`}
+                          onClick={() => setRotateDelta(90)}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                          </svg>
+                          90° Right
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn-angle ${rotateDelta === 180 ? "active" : ""}`}
+                          onClick={() => setRotateDelta(180)}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M7 16V4m0 0L3 8m4-4 4 4M17 8v12m0 0 4-4m-4 4-4-4" />
+                          </svg>
+                          180° Flip
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn-angle ${rotateDelta === 270 ? "active" : ""}`}
+                          onClick={() => setRotateDelta(270)}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M2.5 2v6h6M2.66 15.57a10 10 0 1 0 .57-8.38L-2.44 1.52" />
+                          </svg>
+                          90° Left (270°)
+                        </button>
+                      </div>
+
+                      <label className="field-label" style={{ marginTop: "16px" }}>
+                        Application Scope
+                      </label>
+                      <div className="scope-selection-row">
+                        <label className="radio-pill-label">
+                          <input
+                            type="radio"
+                            name="rotateScope"
+                            checked={rotateAll}
+                            onChange={() => setRotateAll(true)}
+                          />
+                          <span>All {rotateDoc.page_count} Pages</span>
+                        </label>
+                        <label className="radio-pill-label">
+                          <input
+                            type="radio"
+                            name="rotateScope"
+                            checked={!rotateAll}
+                            onChange={() => setRotateAll(false)}
+                          />
+                          <span>Specific Page</span>
+                        </label>
+                        {!rotateAll && (
+                          <input
+                            type="number"
+                            className="input-number-small"
+                            min={1}
+                            max={rotateDoc.page_count}
+                            value={rotateTargetPage}
+                            onChange={(e) =>
+                              setRotateTargetPage(
+                                Math.min(
+                                  rotateDoc.page_count,
+                                  Math.max(1, parseInt(e.target.value) || 1)
+                                )
+                              )
+                            }
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <DestinationSelector
+                    outputPath={rotateOutput}
+                    defaultFilename={`${rotateDoc.filename.replace(/\.pdf$/i, "")}_rotated.pdf`}
+                    onChange={setRotateOutput}
+                  />
+
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="btn-primary-action"
+                      disabled={isProcessing}
+                      onClick={executeRotate}
+                    >
+                      {isProcessing ? (
+                        <span className="spinner-label">
+                          <span className="spinner" /> Rotating Pages...
+                        </span>
+                      ) : (
+                        "Rotate & Save Document"
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
+          )}
 
-            {infoPages !== null && (
-              <div style={{ marginTop: "16px", padding: "16px", background: "rgba(255,255,255,0.04)", borderRadius: "10px" }}>
-                <div style={{ fontSize: "14px", color: "#a4b0be" }}>Total Pages:</div>
-                <div style={{ fontSize: "28px", fontWeight: "bold", color: "#00d2d3" }}>{infoPages} Pages</div>
-              </div>
-            )}
-          </div>
-        )}
+          {/* ================= COMPRESS TOOL ================= */}
+          {activeTool === "compress" && (
+            <div className="tool-card-view">
+              {!compressDoc ? (
+                <DropZone
+                  multiple={false}
+                  title="Drag & drop a PDF file to compress"
+                  subtitle="Deduplicate objects, remove metadata, and shrink file size"
+                  onFilesSelected={handleIncomingPaths}
+                />
+              ) : (
+                <div className="tool-active-pane">
+                  <DocumentCard
+                    doc={compressDoc}
+                    onRemove={() => {
+                      setCompressDoc(null);
+                      setCompressResult(null);
+                    }}
+                  />
 
-        {/* Feedback message banner */}
-        {statusMessage && (
-          <div className={`feedback-card ${isError ? "feedback-error" : "feedback-success"}`}>
-            {statusMessage}
-          </div>
-        )}
+                  <div className="options-panel">
+                    <h4 className="panel-title">Compression Profile</h4>
+                    <div className="preset-cards-grid">
+                      <div
+                        className={`preset-card ${compressPreset === "extreme" ? "active" : ""}`}
+                        onClick={() => setCompressPreset("extreme")}
+                      >
+                        <div className="preset-badge red">Maximum Reduction</div>
+                        <h5 className="preset-name">Extreme Compression</h5>
+                        <p className="preset-desc">
+                          Deep object deduplication and complete metadata stripping. Smallest file size.
+                        </p>
+                        <span className="preset-est">~60-75% Savings</span>
+                      </div>
+
+                      <div
+                        className={`preset-card ${compressPreset === "recommended" ? "active" : ""}`}
+                        onClick={() => setCompressPreset("recommended")}
+                      >
+                        <div className="preset-badge green">Recommended</div>
+                        <h5 className="preset-name">Balanced Optimization</h5>
+                        <p className="preset-desc">
+                          Lossless stream compression and duplicate dictionary merging without visual compromise.
+                        </p>
+                        <span className="preset-est">~40-50% Savings</span>
+                      </div>
+
+                      <div
+                        className={`preset-card ${compressPreset === "high" ? "active" : ""}`}
+                        onClick={() => setCompressPreset("high")}
+                      >
+                        <div className="preset-badge blue">High Fidelity</div>
+                        <h5 className="preset-name">High Quality</h5>
+                        <p className="preset-desc">
+                          Light compression preserving original metadata, vectors, and font tables intact.
+                        </p>
+                        <span className="preset-est">~20-30% Savings</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {compressResult && (
+                    <div className="compression-stats-banner">
+                      <div className="stat-box">
+                        <span className="stat-label">Original Size</span>
+                        <span className="stat-val">{formatBytes(compressResult.original_size)}</span>
+                      </div>
+                      <div className="stat-arrow">→</div>
+                      <div className="stat-box highlight">
+                        <span className="stat-label">Optimized Size</span>
+                        <span className="stat-val">{formatBytes(compressResult.compressed_size)}</span>
+                      </div>
+                      <div className="stat-badge-savings">
+                        Saved {compressResult.ratio_percent.toFixed(1)}%
+                      </div>
+                    </div>
+                  )}
+
+                  <DestinationSelector
+                    outputPath={compressOutput}
+                    defaultFilename={`${compressDoc.filename.replace(/\.pdf$/i, "")}_compressed.pdf`}
+                    onChange={setCompressOutput}
+                  />
+
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="btn-primary-action"
+                      disabled={isProcessing}
+                      onClick={executeCompress}
+                    >
+                      {isProcessing ? (
+                        <span className="spinner-label">
+                          <span className="spinner" /> Optimizing PDF...
+                        </span>
+                      ) : (
+                        "Compress PDF"
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ================= IMAGES TO PDF TOOL ================= */}
+          {activeTool === "img2pdf" && (
+            <div className="tool-card-view">
+              {imagePaths.length === 0 ? (
+                <DropZone
+                  multiple
+                  acceptLabel="Image files (PNG, JPG, WebP)"
+                  extensions={["png", "jpg", "jpeg", "webp"]}
+                  title="Drag & drop images to convert to PDF"
+                  subtitle="Drop PNG, JPEG, or WebP photos to build a unified PDF"
+                  onFilesSelected={handleIncomingPaths}
+                />
+              ) : (
+                <div className="tool-active-pane">
+                  <div className="image-queue-header">
+                    <span className="queue-title">Selected Images ({imagePaths.length})</span>
+                    <button
+                      type="button"
+                      className="btn-queue-add"
+                      onClick={async () => {
+                        const selected = await open({
+                          multiple: true,
+                          filters: [
+                            {
+                              name: "Images",
+                              extensions: ["png", "jpg", "jpeg", "webp"],
+                            },
+                          ],
+                        });
+                        if (selected) {
+                          const paths = Array.isArray(selected) ? selected : [selected];
+                          handleIncomingPaths(paths);
+                        }
+                      }}
+                    >
+                      + Add More Images
+                    </button>
+                  </div>
+
+                  <div className="image-grid-preview">
+                    {imagePaths.map((p, idx) => (
+                      <div key={`${p}-${idx}`} className="image-preview-card">
+                        <div className="image-card-badge">{idx + 1}</div>
+                        <div className="image-card-filename" title={p}>
+                          {p.replace(/\\/g, "/").split("/").pop()}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-remove-thumb"
+                          onClick={() => {
+                            const next = imagePaths.filter((_, i) => i !== idx);
+                            setImagePaths(next);
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <DestinationSelector
+                    outputPath={imgOutput}
+                    defaultFilename="converted_images.pdf"
+                    onChange={setImgOutput}
+                  />
+
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="btn-primary-action"
+                      disabled={isProcessing || imagePaths.length === 0}
+                      onClick={executeImg2Pdf}
+                    >
+                      {isProcessing ? (
+                        <span className="spinner-label">
+                          <span className="spinner" /> Generating PDF...
+                        </span>
+                      ) : (
+                        `Convert ${imagePaths.length} Images to PDF`
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ================= INSPECT & SANITIZE TOOL ================= */}
+          {activeTool === "inspect" && (
+            <div className="tool-card-view">
+              {!inspectDoc ? (
+                <DropZone
+                  multiple={false}
+                  title="Drag & drop a PDF to inspect & sanitize"
+                  subtitle="Audit tracking tags, author metadata, and strip privacy markers"
+                  onFilesSelected={handleIncomingPaths}
+                />
+              ) : (
+                <div className="tool-active-pane">
+                  <DocumentCard
+                    doc={inspectDoc}
+                    onRemove={() => {
+                      setInspectDoc(null);
+                      setInspectMeta(null);
+                    }}
+                  />
+
+                  <div className="options-panel">
+                    <div className="panel-header-with-badge">
+                      <h4 className="panel-title">Document Metadata Audit</h4>
+                      <span className="audit-badge">
+                        {inspectMeta?.author || inspectMeta?.creator
+                          ? "Tracking Data Detected"
+                          : "Clean / No Tracking"}
+                      </span>
+                    </div>
+
+                    <div className="meta-grid">
+                      <div className="meta-cell">
+                        <span className="meta-k">Title</span>
+                        <span className="meta-v">{inspectMeta?.title || "—"}</span>
+                      </div>
+                      <div className="meta-cell">
+                        <span className="meta-k">Author</span>
+                        <span className="meta-v">{inspectMeta?.author || "—"}</span>
+                      </div>
+                      <div className="meta-cell">
+                        <span className="meta-k">Creator Software</span>
+                        <span className="meta-v">{inspectMeta?.creator || "—"}</span>
+                      </div>
+                      <div className="meta-cell">
+                        <span className="meta-k">PDF Producer</span>
+                        <span className="meta-v">{inspectMeta?.producer || "—"}</span>
+                      </div>
+                      <div className="meta-cell">
+                        <span className="meta-k">Creation Date</span>
+                        <span className="meta-v">{inspectMeta?.creation_date || "—"}</span>
+                      </div>
+                      <div className="meta-cell">
+                        <span className="meta-k">Subject</span>
+                        <span className="meta-v">{inspectMeta?.subject || "—"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <DestinationSelector
+                    outputPath={sanitizeOutput}
+                    defaultFilename={`${inspectDoc.filename.replace(/\.pdf$/i, "")}_sanitized.pdf`}
+                    onChange={setSanitizeOutput}
+                    label="Sanitized Output Destination"
+                  />
+
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="btn-primary-action"
+                      disabled={isProcessing}
+                      onClick={executeSanitize}
+                    >
+                      {isProcessing ? (
+                        <span className="spinner-label">
+                          <span className="spinner" /> Stripping Metadata...
+                        </span>
+                      ) : (
+                        "Strip Metadata & Sanitize Document"
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
       </main>
+
+      {/* Completion & Error Modal */}
+      {modalState.isOpen && (
+        <ResultModal
+          title={modalState.title}
+          message={modalState.message}
+          outputPath={modalState.outputPath}
+          isError={modalState.isError}
+          onClose={() => setModalState({ isOpen: false, title: "", message: "" })}
+        />
+      )}
     </div>
   );
 }

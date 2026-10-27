@@ -273,6 +273,30 @@ impl PaperFlowEngine {
         doc.save(out_path)?;
         Ok(())
     }
+
+    /// Rotate all pages in a document (angle: 90, 180, 270)
+    pub fn rotate_all_pages(
+        input: &Path,
+        rotation_delta: i64,
+        out_path: &Path,
+    ) -> Result<(), CoreError> {
+        let mut doc = Document::load(input)?;
+        let pages = doc.get_pages();
+
+        for (&_page_num, &page_id) in &pages {
+            if let Ok(page_dict) = doc.get_dictionary_mut(page_id) {
+                let current_rot = page_dict
+                    .get(b"Rotate")
+                    .and_then(|r| r.as_i64())
+                    .unwrap_or(0);
+                let new_rot = (current_rot + rotation_delta) % 360;
+                page_dict.set("Rotate", Object::Integer(new_rot));
+            }
+        }
+
+        doc.save(out_path)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

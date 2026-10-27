@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "paperflow",
+  "productName": "PaperFlow",
   "version": "0.1.0",
   "identifier": "io.github.paperflow.app",
   "build": {
@@ -13,8 +13,10 @@
     "windows": [
       {
         "title": "PaperFlow",
-        "width": 1024,
-        "height": 720
+        "width": 1180,
+        "height": 780,
+        "minWidth": 940,
+        "minHeight": 650
       }
     ],
     "security": {
@@ -24,9 +26,8 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "shortDescription": "Privacy-first on-device PDF manager",
-    "longDescription": "High-performance, private, on-device PDF management studio.",
-    "category": "Office",
+    "shortDescription": "Privacy-First On-Device PDF Studio",
+    "longDescription": "High-performance, 100% offline PDF manager for Fedora Linux and Android with zero cloud dependencies.",
     "copyright": "2026 PaperFlow",
     "icon": [
       "icons/32x32.png",

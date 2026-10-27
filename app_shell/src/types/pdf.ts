@@ -1,25 +1,34 @@
-export interface DocumentStats {
+export interface DocDetails {
   path: string;
-  pageCount: number;
-  sizeBytes?: number;
+  filename: string;
+  page_count: number;
+  file_size: number;
+  title?: string;
+  author?: string;
+  creation_date?: string;
 }
 
-export interface SplitRequest {
-  input: string;
-  ranges: string;
-  output: string;
+export interface CompressDetails {
+  original_size: number;
+  compressed_size: number;
+  ratio_percent: number;
 }
 
-export interface MergeRequest {
-  inputs: string[];
-  output: string;
+export interface DocumentMetadata {
+  title?: string;
+  author?: string;
+  subject?: string;
+  keywords?: string;
+  creator?: string;
+  producer?: string;
+  creation_date?: string;
+  mod_date?: string;
 }
 
-export interface RotateRequest {
-  input: string;
-  page: number;
-  delta: number;
-  output: string;
-}
-
-export type ToolCategory = "organize" | "optimize" | "convert" | "security";
+export type ToolType = 
+  | "merge" 
+  | "split" 
+  | "rotate" 
+  | "compress" 
+  | "img2pdf" 
+  | "inspect";
