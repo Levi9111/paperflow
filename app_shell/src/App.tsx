@@ -549,7 +549,7 @@ export default function App() {
       <main className="workspace">
         {/* Top Header */}
         <header className="workspace-header">
-          <div className="header-titles">
+          <div className="header-titles" key={activeTool}>
             <h2 className="tool-title">
               {tools.find((t) => t.id === activeTool)?.label}
             </h2>
@@ -574,7 +574,7 @@ export default function App() {
         <section className="tool-canvas">
           {/* ================= MERGE TOOL ================= */}
           {activeTool === "merge" && (
-            <div className="tool-card-view">
+            <div className="tool-card-view" key="merge">
               {mergeDocs.length === 0 ? (
                 <DropZone
                   multiple
@@ -652,7 +652,7 @@ export default function App() {
 
           {/* ================= SPLIT TOOL ================= */}
           {activeTool === "split" && (
-            <div className="tool-card-view">
+            <div className="tool-card-view" key="split">
               {!splitDoc ? (
                 <DropZone
                   multiple={false}
@@ -797,7 +797,7 @@ export default function App() {
 
           {/* ================= ROTATE TOOL ================= */}
           {activeTool === "rotate" && (
-            <div className="tool-card-view">
+            <div className="tool-card-view" key="rotate">
               {!rotateDoc ? (
                 <DropZone
                   multiple={false}
@@ -946,7 +946,7 @@ export default function App() {
 
           {/* ================= COMPRESS TOOL ================= */}
           {activeTool === "compress" && (
-            <div className="tool-card-view">
+            <div className="tool-card-view" key="compress">
               {!compressDoc ? (
                 <DropZone
                   multiple={false}
@@ -1051,7 +1051,7 @@ export default function App() {
 
           {/* ================= IMAGES TO PDF TOOL ================= */}
           {activeTool === "img2pdf" && (
-            <div className="tool-card-view">
+            <div className="tool-card-view" key="img2pdf">
               {imagePaths.length === 0 ? (
                 <DropZone
                   multiple
@@ -1138,7 +1138,7 @@ export default function App() {
 
           {/* ================= INSPECT & SANITIZE TOOL ================= */}
           {activeTool === "inspect" && (
-            <div className="tool-card-view">
+            <div className="tool-card-view" key="inspect">
               {!inspectDoc ? (
                 <DropZone
                   multiple={false}
