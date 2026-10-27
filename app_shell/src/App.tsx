@@ -7,6 +7,7 @@ import { DocumentCard } from "./components/DocumentCard";
 import { DocumentQueue } from "./components/DocumentQueue";
 import { DestinationSelector } from "./components/DestinationSelector";
 import { ResultModal } from "./components/ResultModal";
+import { ToastContainer, ToastMessage } from "./components/Toast";
 import { DocDetails, CompressDetails, DocumentMetadata, ToolType } from "./types/pdf";
 import { formatBytes, getDefaultOutputPath } from "./utils/format";
 import { getCachedDocDetails } from "./utils/docCache";
@@ -17,6 +18,18 @@ export default function App() {
 
   // Global window drag state
   const [isWindowDragging, setIsWindowDragging] = useState(false);
+
+  // Non-blocking toast notifications
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const showToast = (text: string, type: "info" | "success" | "warning" = "info") => {
+    const id = Date.now().toString() + Math.random().toString(36).substring(2, 5);
+    setToasts((prev) => [...prev.slice(-3), { id, text, type }]);
+  };
+
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
 
   // Merge state
   const [mergeDocs, setMergeDocs] = useState<DocDetails[]>([]);
@@ -84,6 +97,7 @@ export default function App() {
         }
         return next;
       });
+      showToast(`Added ${loaded.length} PDF${loaded.length > 1 ? "s" : ""} to queue`, "success");
     } else if (activeTool === "split") {
       const pdf = paths.find((p) => p.toLowerCase().endsWith(".pdf"));
       if (!pdf) return;
@@ -92,6 +106,7 @@ export default function App() {
       setSplitStartPage(1);
       setSplitEndPage(Math.min(details.page_count, 3));
       setSplitOutput(getDefaultOutputPath(details.path, "split"));
+      showToast(`Loaded ${details.filename} (${details.page_count} pages)`, "info");
     } else if (activeTool === "rotate") {
       const pdf = paths.find((p) => p.toLowerCase().endsWith(".pdf"));
       if (!pdf) return;
@@ -99,6 +114,7 @@ export default function App() {
       setRotateDoc(details);
       setRotateTargetPage(1);
       setRotateOutput(getDefaultOutputPath(details.path, "rotated"));
+      showToast(`Loaded ${details.filename} (${details.page_count} pages)`, "info");
     } else if (activeTool === "compress") {
       const pdf = paths.find((p) => p.toLowerCase().endsWith(".pdf"));
       if (!pdf) return;
@@ -106,6 +122,7 @@ export default function App() {
       setCompressDoc(details);
       setCompressResult(null);
       setCompressOutput(getDefaultOutputPath(details.path, "compressed"));
+      showToast(`Loaded ${details.filename} (${formatBytes(details.file_size)})`, "info");
     } else if (activeTool === "img2pdf") {
       const validImages = paths.filter((p) => {
         const lower = p.toLowerCase();
@@ -124,6 +141,7 @@ export default function App() {
         }
         return next;
       });
+      showToast(`Added ${validImages.length} image${validImages.length > 1 ? "s" : ""}`, "info");
     } else if (activeTool === "inspect") {
       const pdf = paths.find((p) => p.toLowerCase().endsWith(".pdf"));
       if (!pdf) return;
@@ -133,8 +151,10 @@ export default function App() {
       try {
         const meta = await invoke<DocumentMetadata>("get_metadata", { input: details.path });
         setInspectMeta(meta);
+        showToast(`Loaded metadata for ${details.filename}`, "info");
       } catch (e) {
         console.error("Failed to read metadata:", e);
+        showToast("Failed to read document metadata", "warning");
       }
     }
   };
@@ -1195,6 +1215,9 @@ export default function App() {
           onClose={() => setModalState({ isOpen: false, title: "", message: "" })}
         />
       )}
+
+      {/* Non-blocking Toast Alerts */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
