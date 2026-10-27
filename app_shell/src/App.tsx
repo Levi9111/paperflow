@@ -179,6 +179,47 @@ export default function App() {
     };
   }, [activeTool, mergeOutput, imgOutput]);
 
+  // Global keyboard shortcuts (Ctrl+1..6 for tools, Ctrl+O to browse, Esc to close modal)
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if (modalState.isOpen && e.key === "Escape") {
+        setModalState((prev) => ({ ...prev, isOpen: false }));
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key >= "1" && e.key <= "6") {
+        e.preventDefault();
+        const toolList: ToolType[] = ["merge", "split", "rotate", "compress", "img2pdf", "inspect"];
+        const idx = parseInt(e.key) - 1;
+        if (toolList[idx]) {
+          setActiveTool(toolList[idx]);
+        }
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && (e.key === "o" || e.key === "O")) {
+        e.preventDefault();
+        try {
+          const isImg = activeTool === "img2pdf";
+          const extensions = isImg ? ["png", "jpg", "jpeg", "webp"] : ["pdf"];
+          const selected = await open({
+            multiple: activeTool === "merge" || isImg,
+            filters: [{ name: isImg ? "Images" : "PDF files", extensions }],
+          });
+          if (selected) {
+            const paths = Array.isArray(selected) ? selected : [selected];
+            handleIncomingPaths(paths);
+          }
+        } catch (err) {
+          console.error("Keyboard shortcut open error:", err);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [modalState.isOpen, activeTool]);
+
   // Execute Merge
   const executeMerge = async () => {
     if (mergeDocs.length < 2) {
