@@ -186,6 +186,61 @@ impl PaperFlowEngine {
         Ok(total_pages)
     }
 
+    /// Parse and validate page range string (e.g., "1-3, 5, 8-10") against total pages
+    pub fn parse_page_ranges(range_str: &str, total_pages: usize) -> Result<Vec<u32>, CoreError> {
+        if range_str.trim().is_empty() {
+            return Err(CoreError::InvalidRange("Range string is empty".into()));
+        }
+
+        let mut pages = Vec::new();
+        for part in range_str.split(',') {
+            let part = part.trim();
+            if part.is_empty() {
+                continue;
+            }
+
+            if part.contains('-') {
+                let bounds: Vec<&str> = part.split('-').collect();
+                if bounds.len() != 2 {
+                    return Err(CoreError::InvalidRange(format!("Malformed range: {}", part)));
+                }
+                let start: u32 = bounds[0].trim().parse()
+                    .map_err(|_| CoreError::InvalidRange(format!("Invalid start page in range: {}", part)))?;
+                let end: u32 = bounds[1].trim().parse()
+                    .map_err(|_| CoreError::InvalidRange(format!("Invalid end page in range: {}", part)))?;
+
+                if start == 0 || end == 0 {
+                    return Err(CoreError::InvalidRange("Page numbers must be 1-based (>= 1)".into()));
+                }
+
+                let (low, high) = if start <= end { (start, end) } else { (end, start) };
+                for p in low..=high {
+                    if (p as usize) <= total_pages {
+                        pages.push(p);
+                    }
+                }
+            } else {
+                let page: u32 = part.parse()
+                    .map_err(|_| CoreError::InvalidRange(format!("Invalid page number: {}", part)))?;
+                if page == 0 {
+                    return Err(CoreError::InvalidRange("Page numbers must be 1-based (>= 1)".into()));
+                }
+                if (page as usize) <= total_pages {
+                    pages.push(page);
+                }
+            }
+        }
+
+        pages.sort();
+        pages.dedup();
+
+        if pages.is_empty() {
+            return Err(CoreError::InvalidRange("No valid pages found in specified range".into()));
+        }
+
+        Ok(pages)
+    }
+
     /// Split a document by page indices (1-based), writing to out_path
     pub fn split_range(
         input: &Path,

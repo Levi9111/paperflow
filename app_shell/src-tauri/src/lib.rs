@@ -73,28 +73,8 @@ fn pdf_split(input: String, ranges: String, output: String) -> Result<usize, Str
     let total = PaperFlowEngine::get_page_count(&in_path)
         .map_err(|e| e.to_string())?;
 
-    let mut pages = Vec::new();
-    for part in ranges.split(',') {
-        let part = part.trim();
-        if part.contains('-') {
-            let bounds: Vec<&str> = part.split('-').collect();
-            if bounds.len() == 2 {
-                if let (Ok(start), Ok(end)) = (bounds[0].trim().parse::<u32>(), bounds[1].trim().parse::<u32>()) {
-                    for p in start..=end {
-                        if (p as usize) <= total {
-                            pages.push(p);
-                        }
-                    }
-                }
-            }
-        } else if let Ok(page) = part.parse::<u32>() {
-            if (page as usize) <= total {
-                pages.push(page);
-            }
-        }
-    }
-    pages.sort();
-    pages.dedup();
+    let pages = PaperFlowEngine::parse_page_ranges(&ranges, total)
+        .map_err(|e| e.to_string())?;
 
     PaperFlowEngine::split_range(&in_path, &pages, &out_path, &ctx)
         .map_err(|e| e.to_string())
