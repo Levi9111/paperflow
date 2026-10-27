@@ -9,7 +9,7 @@ import { DestinationSelector } from "./components/DestinationSelector";
 import { ResultModal } from "./components/ResultModal";
 import { ToastContainer, ToastMessage } from "./components/Toast";
 import { DocDetails, CompressDetails, DocumentMetadata, ToolType } from "./types/pdf";
-import { formatBytes, getDefaultOutputPath } from "./utils/format";
+import { formatBytes, getDefaultOutputPath, validatePageRanges } from "./utils/format";
 import { getCachedDocDetails } from "./utils/docCache";
 import "./App.css";
 
@@ -42,6 +42,11 @@ export default function App() {
   const [splitEndPage, setSplitEndPage] = useState(1);
   const [splitCustomRange, setSplitCustomRange] = useState("1-2");
   const [splitOutput, setSplitOutput] = useState("");
+
+  // Split range validation
+  const customRangeValidation = splitDoc
+    ? validatePageRanges(splitCustomRange, splitDoc.page_count)
+    : { valid: true, pages: [] };
 
   // Rotate state
   const [rotateDoc, setRotateDoc] = useState<DocDetails | null>(null);
@@ -269,6 +274,10 @@ export default function App() {
   // Execute Split
   const executeSplit = async () => {
     if (!splitDoc) return;
+    if (splitMode === "custom" && !customRangeValidation.valid) {
+      showToast(customRangeValidation.error || "Invalid page range syntax", "warning");
+      return;
+    }
     const targetOut = splitOutput || getDefaultOutputPath(splitDoc.path, "split");
     const rangeString =
       splitMode === "range" ? `${splitStartPage}-${splitEndPage}` : splitCustomRange;
@@ -737,6 +746,24 @@ export default function App() {
                           onChange={(e) => setSplitCustomRange(e.target.value)}
                           placeholder="e.g. 1-3, 5, 8"
                         />
+                        {splitCustomRange.trim() && (
+                          <div
+                            className={`range-status-badge ${
+                              customRangeValidation.valid ? "valid" : "invalid"
+                            }`}
+                          >
+                            {customRangeValidation.valid ? (
+                              <span>
+                                ✓ {customRangeValidation.pages.length} page
+                                {customRangeValidation.pages.length > 1 ? "s" : ""} selected (
+                                {customRangeValidation.pages.slice(0, 6).join(", ")}
+                                {customRangeValidation.pages.length > 6 ? "..." : ""})
+                              </span>
+                            ) : (
+                              <span>⚠ {customRangeValidation.error}</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -751,7 +778,7 @@ export default function App() {
                     <button
                       type="button"
                       className="btn-primary-action"
-                      disabled={isProcessing}
+                      disabled={isProcessing || (splitMode === "custom" && !customRangeValidation.valid)}
                       onClick={executeSplit}
                     >
                       {isProcessing ? (
