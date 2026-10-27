@@ -1,101 +1,93 @@
-# 📄 PaperFlow — Privacy-First On-Device PDF Manager
+# 📄 PaperFlow — Fast, On-Device PDF Studio
 
-[![Platform](https://img.shields.io/badge/Platforms-Fedora%20Linux%20%7C%20Android-coral)](https://github.com/paperflow/paperflow)
+[![Platform](https://img.shields.io/badge/Platform-Fedora%20Linux%20%7C%20Desktop-coral)](https://github.com/Levi9111/paperflow)
+[![Rust](https://img.shields.io/badge/Rust-Core%20Engine-orange.svg)](https://www.rust-lang.org/)
+[![Tauri](https://img.shields.io/badge/Tauri-v2%20Shell-24C8D8.svg)](https://tauri.app/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Offline Guarantee](https://img.shields.io/badge/Privacy-100%25%20On--Device%20%E2%80%A2%20Zero%20Network-green)](#privacy--security-guarantee)
 
-> **Your PDFs. Your device. Nothing uploaded.**
+> **Fast, private, and local PDF manipulation for everyday workflows.**
 
-PaperFlow is a modern, high-performance, and completely offline PDF management studio engineered for **Fedora Linux** and **Android**. Inspired by ILovePDF's comprehensive toolset, PaperFlow eliminates remote cloud dependencies, recurring subscription barriers, and data exfiltration risks by executing 100% of PDF processing locally on your hardware.
-
----
-
-## 🚀 Core Features (MVP Tier)
-
-### 🗂️ Document Organization
-- **Merge PDF**: Multi-file merging with visual reordering and page selection.
-- **Split PDF**: Extract specific page ranges (e.g. `1-3, 5, 8`) or burst all pages into single documents.
-- **Visual Page Organizer**: Interactive thumbnail grid with one-click page rotations (90°/180°/270°), reordering, and deletion.
-
-### ⚡ Optimization
-- **Smart Compression**: Extreme (~70% reduction), Recommended (~50%), and High-Quality presets with DPI and image stream downsampling.
-- **Document Flattening**: Permanently bake interactive form fields and annotation layers.
-
-### 🔄 Conversion & Watermarking
-- **Images to PDF**: Convert JPG, PNG, WebP, TIFF photos with automatic landscape orientation detection and page margins.
-- **PDF to Images**: High-resolution rasterization to PNG / JPEG sequences.
-- **Watermark Engine**: Custom text and stamp overlays with adjustable opacity, rotation, and font sizes.
-
-### 👁️ Viewer & Printing
-- **Interactive Viewer**: Zoom, pan, page jump, and direct native printing.
+PaperFlow is a high-performance desktop PDF management application built with a pure Rust processing engine and a responsive Tauri v2 + React 19 interface. All document manipulations occur 100% locally on your hardware with zero cloud dependencies or subscriptions.
 
 ---
 
-## 🔒 Privacy & Security Guarantee
+## 🚀 Key Features
 
-PaperFlow is architected with **verifiable privacy**:
+### 🗂️ Document Operations
+- **Merge PDF**: Combine multiple PDF files with visual reordering, page counts, and instant preview.
+- **Split PDF**: Extract page ranges (e.g. `1-3, 5, 8-10`) or sequential spans with live client-side syntax validation.
+- **Rotate Pages**: Rotate individual pages or whole documents by 90°, 180°, or 270° with interactive orientation preview.
+- **Smart Compression**: Optimize file size across multiple presets (`Extreme`, `Recommended`, `High Quality`).
+- **Images to PDF**: Convert JPG, PNG, and WebP images into unified PDF documents with custom page sizing presets (`Fit Image`, `A4`, `US Letter`).
+- **Metadata Audit & Sanitization**: Inspect document version, page count, and encryption state, and wipe sensitive metadata tags with one click.
 
-1. **Zero Network Permissions**:
-   - **Linux Flatpak**: The manifest explicitly omits `--share=network`. The Flatpak sandbox will not permit outbound or inbound network connections.
-   - **Android**: Release builds request **no `android.permission.INTERNET`**.
-2. **Non-Destructive Operations**:
-   - Original user files are **never** modified or overwritten in-place. All outputs are generated into target files or safe user-selected paths.
-3. **Automated Temp Isolation & Purge**:
-   - Intermediate files reside in `.paperflow_temp/` and are automatically deleted on completion and upon app launch.
-4. **Cloud Backup Blocked**:
-   - Android manifest specifies `android:allowBackup="false"` to prevent backing up sensitive documents or cache history to cloud accounts.
-
----
-
-## 🛠️ Build & Installation
-
-### Fedora Linux (Desktop)
-
-#### 1. Compile Release Binary
-```bash
-flutter build linux --release
-```
-The compiled native ELF executable and PDFium runtime bundle will be placed at:
-```bash
-./build/linux/x64/release/bundle/paperflow
-```
-
-#### 2. Run Directly
-```bash
-./build/linux/x64/release/bundle/paperflow
-```
-
-#### 3. Flatpak Packaging
-```bash
-flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.paperflow.PaperFlow.yml
-flatpak run io.github.paperflow.PaperFlow
-flatpak info --show-permissions io.github.paperflow.PaperFlow
-```
+### ⚡ Desktop Experience
+- **Full Drag & Drop**: Drop PDF files or images directly onto any tool view or drop zone.
+- **Keyboard Shortcuts**:
+  - `Ctrl + 1` ... `Ctrl + 6`: Instantly switch between tools.
+  - `Ctrl + O`: Open file picker for the active tool.
+  - `Esc`: Dismiss modals and overlays.
+- **Non-blocking Status Toasts**: Immediate visual feedback for file loading, queue updates, and completions.
+- **Modern Dark Obsidian UI**: Refined 4–6px geometry, subtle borders, and clutter-free personal desktop layout.
 
 ---
 
-### Android
+## 🛠️ Building & Development
 
-#### 1. Connect Device & Run
+### Prerequisites
+- [Rust toolchain](https://rustup.rs/) (edition 2021)
+- [Node.js](https://nodejs.org/) & [pnpm](https://pnpm.io/)
+- Tauri development dependencies (e.g. `webkit2gtk-4.1` on Fedora)
+
+### 1. Run Unit Tests (Rust Core)
 ```bash
-flutter run -d android
+cargo test --workspace
 ```
 
-#### 2. Build Release APK (16 KB Aligned)
+### 2. Run Desktop App in Development
 ```bash
-flutter build apk --release
+cd app_shell
+pnpm install
+pnpm tauri dev
+```
+
+### 3. Build Production Desktop Bundle
+```bash
+cd app_shell
+pnpm build
+cargo tauri build
+```
+The compiled native executable will be located at:
+```bash
+app_shell/src-tauri/target/release/app_shell
+```
+
+### 4. Headless CLI Usage
+You can also build and use the standalone CLI tool:
+```bash
+cargo build --release -p paperflow-cli
+
+# Merge files
+./target/release/paperflow merge -i doc1.pdf -i doc2.pdf -o combined.pdf
+
+# Split specific ranges
+./target/release/paperflow split -i doc.pdf -r "1-3, 5" -o extracted.pdf
+
+# Rotate entire document
+./target/release/paperflow rotate -i doc.pdf -a 90 --all -o rotated.pdf
+
+# Inspect metadata
+./target/release/paperflow meta -i doc.pdf
 ```
 
 ---
 
-## 🧪 Testing & Quality Assurance
+## 🏛️ Architecture
 
-Run the complete test suite:
-```bash
-flutter test
-```
+Detailed architecture and design specifications are documented in [docs/architecture.md](docs/architecture.md).
 
-Includes:
-- **Smoke tests**: Application mounting and shell layout validation.
-- **Quality & immutability tests**: Verified bitwise non-destructive guarantees and PDF stream headers.
-- **Analyzer verification**: `flutter analyze` runs with zero errors and zero warnings.
+---
+
+## 📜 License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
