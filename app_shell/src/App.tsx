@@ -1155,6 +1155,14 @@ export default function App() {
                         <span className="meta-k">Subject</span>
                         <span className="meta-v">{inspectMeta?.subject || "—"}</span>
                       </div>
+                      <div className="meta-cell">
+                        <span className="meta-k">PDF Version</span>
+                        <span className="meta-v">{inspectMeta?.version ? `PDF ${inspectMeta.version}` : "—"}</span>
+                      </div>
+                      <div className="meta-cell">
+                        <span className="meta-k">Encryption / Password</span>
+                        <span className="meta-v">{inspectMeta?.is_encrypted ? "Protected / Encrypted" : "Unencrypted"}</span>
+                      </div>
                     </div>
                   </div>
 

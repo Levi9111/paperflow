@@ -12,6 +12,9 @@ pub struct DocumentMetadata {
     pub producer: Option<String>,
     pub creation_date: Option<String>,
     pub mod_date: Option<String>,
+    pub version: Option<String>,
+    pub is_encrypted: bool,
+    pub page_count: usize,
 }
 
 impl DocumentMetadata {
@@ -22,6 +25,9 @@ impl DocumentMetadata {
 
     pub fn from_document(doc: &Document) -> Result<Self, CoreError> {
         let mut meta = DocumentMetadata::default();
+        meta.version = Some(doc.version.clone());
+        meta.is_encrypted = doc.is_encrypted();
+        meta.page_count = doc.get_pages().len();
 
         if let Ok(info_dict) = doc.trailer.get(b"Info")
             .and_then(Object::as_reference)
@@ -61,12 +67,14 @@ impl DocumentMetadata {
         if let Some(ref subject) = meta.subject {
             dict.set("Subject", Object::String(subject.as_bytes().to_vec(), StringFormat::Literal));
         }
-        if let Some(ref keywords) = meta.keywords {
-            dict.set("Keywords", Object::String(keywords.as_bytes().to_vec(), StringFormat::Literal));
+        if let Some(ref creator) = meta.creator {
+            dict.set("Creator", Object::String(creator.as_bytes().to_vec(), StringFormat::Literal));
         }
-        dict.set("Producer", Object::String(b"PaperFlow 1.0 (Privacy-First)".to_vec(), StringFormat::Literal));
+        if let Some(ref producer) = meta.producer {
+            dict.set("Producer", Object::String(producer.as_bytes().to_vec(), StringFormat::Literal));
+        }
 
-        let info_id = doc.add_object(dict);
+        let info_id = doc.add_object(Object::Dictionary(dict));
         doc.trailer.set("Info", Object::Reference(info_id));
         doc.save(output)?;
         Ok(())

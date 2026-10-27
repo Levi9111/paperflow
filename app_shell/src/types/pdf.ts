@@ -23,6 +23,9 @@ export interface DocumentMetadata {
   producer?: string;
   creation_date?: string;
   mod_date?: string;
+  version?: string;
+  is_encrypted?: boolean;
+  page_count?: number;
 }
 
 export type ToolType = 
