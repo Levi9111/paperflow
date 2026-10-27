@@ -51,13 +51,27 @@ pnpm install
 pnpm tauri dev
 ```
 
-### 3. Build Production Desktop Bundle
+### 3. Build Fedora Linux RPM Package
+To generate the standalone `.rpm` package for Fedora Linux:
 ```bash
 cd app_shell
-pnpm build
-cargo tauri build
+pnpm build:rpm
 ```
-The compiled native executable will be located at:
+Or using the Tauri CLI directly:
+```bash
+pnpm tauri build --bundles rpm
+```
+The generated `.rpm` installer will be located at:
+```bash
+app_shell/src-tauri/target/release/bundle/rpm/PaperFlow-0.1.0-1.x86_64.rpm
+```
+To install it on your Fedora machine:
+```bash
+sudo dnf install ./app_shell/src-tauri/target/release/bundle/rpm/PaperFlow-0.1.0-1.x86_64.rpm
+```
+
+### 4. Standalone Binary Output
+The compiled release executable is located at:
 ```bash
 app_shell/src-tauri/target/release/app_shell
 ```
