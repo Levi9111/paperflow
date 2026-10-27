@@ -27,7 +27,7 @@ enum Commands {
         #[arg(short, long)]
         output: PathBuf,
     },
-    /// Split a PDF by page ranges (e.g. 1-3, 5)
+    /// Split a PDF by page ranges (e.g. 1-3, 5, 8-10)
     Split {
         #[arg(short, long)]
         input: PathBuf,
@@ -36,12 +36,12 @@ enum Commands {
         #[arg(short, long)]
         output: PathBuf,
     },
-    /// Rotate a specific page (e.g. 90, 180, 270 degrees)
+    /// Rotate specific pages or the entire document (e.g. 90, 180, 270 degrees)
     Rotate {
         #[arg(short, long)]
         input: PathBuf,
         #[arg(short, long)]
-        page: u32,
+        page: Option<u32>,
         #[arg(short, long, default_value = "90")]
         delta: i64,
         #[arg(short, long)]
@@ -72,32 +72,6 @@ enum Commands {
     },
 }
 
-fn parse_ranges(ranges_str: &str, max_pages: usize) -> Vec<u32> {
-    let mut pages = Vec::new();
-    for part in ranges_str.split(',') {
-        let part = part.trim();
-        if part.contains('-') {
-            let bounds: Vec<&str> = part.split('-').collect();
-            if bounds.len() == 2 {
-                if let (Ok(start), Ok(end)) = (bounds[0].trim().parse::<u32>(), bounds[1].trim().parse::<u32>()) {
-                    for p in start..=end {
-                        if (p as usize) <= max_pages {
-                            pages.push(p);
-                        }
-                    }
-                }
-            }
-        } else if let Ok(page) = part.parse::<u32>() {
-            if (page as usize) <= max_pages {
-                pages.push(page);
-            }
-        }
-    }
-    pages.sort();
-    pages.dedup();
-    pages
-}
-
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let ctx = JobContext::new_noop(std::env::temp_dir());
@@ -115,40 +89,52 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::Split { input, ranges, output } => {
             let total = PaperFlowEngine::get_page_count(&input)?;
-            let pages_to_keep = parse_ranges(&ranges, total);
+            let pages_to_keep = PaperFlowEngine::parse_page_ranges(&ranges, total)?;
             println!("Extracting {} pages from {}...", pages_to_keep.len(), input.display());
             let count = PaperFlowEngine::split_range(&input, &pages_to_keep, &output, &ctx)?;
             println!("Saved {} extracted pages to {}", count, output.display());
         }
         Commands::Rotate { input, page, delta, output } => {
-            println!("Rotating page {} by {}° in {}...", page, delta, input.display());
-            PaperFlowEngine::rotate_page(&input, page, delta, &output)?;
+            if let Some(p) = page {
+                println!("Rotating page {} by {}° in {}...", p, delta, input.display());
+                PaperFlowEngine::rotate_page(&input, p, delta, &output)?;
+            } else {
+                println!("Rotating all pages by {}° in {}...", delta, input.display());
+                PaperFlowEngine::rotate_all_pages(&input, delta, &output)?;
+            }
             println!("Saved rotated PDF to {}", output.display());
         }
         Commands::Meta { input, strip_to } => {
             let meta = DocumentMetadata::read_from_file(&input)?;
-            println!("Metadata for {}:", input.display());
-            println!("  Title: {:?}", meta.title);
-            println!("  Author: {:?}", meta.author);
-            println!("  Producer: {:?}", meta.producer);
+            println!("Document Properties for {}:", input.display());
+            println!("  Title:       {}", meta.title.as_deref().unwrap_or("—"));
+            println!("  Author:      {}", meta.author.as_deref().unwrap_or("—"));
+            println!("  Creator:     {}", meta.creator.as_deref().unwrap_or("—"));
+            println!("  Producer:    {}", meta.producer.as_deref().unwrap_or("—"));
+            println!("  Version:     PDF {}", meta.version.as_deref().unwrap_or("—"));
+            println!("  Pages:       {}", meta.page_count);
+            println!("  Encrypted:   {}", if meta.is_encrypted { "Yes" } else { "No" });
             if let Some(clean_out) = strip_to {
                 DocumentMetadata::sanitize_and_save(&input, &clean_out)?;
-                println!("Sanitized (stripped) metadata saved to {}", clean_out.display());
+                println!("Cleared metadata saved to {}", clean_out.display());
             }
         }
         Commands::Compress { input, output, preset } => {
             let p = match preset.to_lowercase().as_str() {
                 "extreme" => CompressionPreset::Extreme,
-                "high" => CompressionPreset::HighQuality,
+                "high" | "highquality" => CompressionPreset::HighQuality,
                 _ => CompressionPreset::Recommended,
             };
-            let (orig, compressed) = Compressor::compress_file(&input, &output, p, &ctx)?;
-            println!("Compressed {} ({} bytes) -> {} ({} bytes)", input.display(), orig, output.display(), compressed);
+            println!("Compressing {} with {} preset...", input.display(), preset);
+            let (orig, comp) = Compressor::compress_file(&input, &output, p, &ctx)?;
+            let saved = if orig > 0 { ((orig - comp) as f64 / orig as f64) * 100.0 } else { 0.0 };
+            println!("Compressed {} bytes -> {} bytes ({:.1}% reduction)", orig, comp, saved);
+            println!("Output saved to {}", output.display());
         }
         Commands::Img2Pdf { images, output } => {
-            println!("Converting {} images into {}...", images.len(), output.display());
+            println!("Converting {} images to PDF...", images.len());
             let count = ImageConverter::image_to_pdf(&images, &output)?;
-            println!("Successfully generated PDF with {} pages at {}", count, output.display());
+            println!("Created {}-page PDF document at {}", count, output.display());
         }
     }
 
