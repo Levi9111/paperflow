@@ -24,6 +24,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "shortDescription": "Privacy-first on-device PDF manager",
+    "longDescription": "High-performance, private, on-device PDF management studio.",
+    "category": "Office",
+    "copyright": "2026 PaperFlow",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

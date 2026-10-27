@@ -1,0 +1,56 @@
+name: "Release"
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: "Build and Release Desktop Packages"
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js & pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+          cache-dependency-path: app_shell/pnpm-lock.yaml
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf rpm
+
+      - name: Install frontend dependencies
+        run: cd app_shell && pnpm install
+
+      - name: Build Tauri Desktop App & Create GitHub Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: "./app_shell"
+          tagName: ${{ github.ref_name }}
+          releaseName: "PaperFlow ${{ github.ref_name }}"
+          releaseBody: |
+            ## 📄 PaperFlow Release
+
+            Download the pre-compiled installer for your system:
+            - **Fedora / RHEL**: Download the `.rpm` package and double-click to install.
+            - **Universal Linux**: Download the `.AppImage`, mark as executable, and run directly.
+            - **Debian / Ubuntu**: Download the `.deb` package.
+          releaseDraft: false
+          prerelease: false
