@@ -352,8 +352,8 @@ export default function App() {
       });
       setModalState({
         isOpen: true,
-        title: "Metadata Stripped & Sanitized!",
-        message: "Successfully removed all tracking markers, author signatures, and software fingerprints.",
+        title: "Metadata Cleared",
+        message: "Saved a clean copy of your document with author and software details removed.",
         outputPath: targetOut,
         isError: false,
       });
@@ -450,7 +450,7 @@ export default function App() {
               <path d="m8 16 4-4 4 4" />
             </svg>
             <h2>Drop to Load Files into PaperFlow</h2>
-            <p>100% on-device processing • No data ever leaves your computer</p>
+            <p>Drop your files to begin</p>
           </div>
         </div>
       )}
@@ -461,12 +461,12 @@ export default function App() {
           <img src="/logo.jpg" alt="PaperFlow Logo" className="brand-logo" />
           <div className="brand-text">
             <h1 className="brand-name">PaperFlow</h1>
-            <span className="brand-badge">RUST CORE • 100% OFFLINE</span>
+            <span className="brand-badge">PDF Studio</span>
           </div>
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-group-label">PDF Studio Tools</div>
+          <div className="nav-group-label">PDF Tools</div>
           {tools.map((t) => (
             <button
               key={t.id}
@@ -482,13 +482,7 @@ export default function App() {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="privacy-card">
-            <div className="privacy-indicator">
-              <span className="status-dot online" />
-              <span className="privacy-text">Verifiable Local Privacy</span>
-            </div>
-            <p className="privacy-desc">Network sandbox active. No analytics, tracking, or cloud uploads.</p>
-          </div>
+          <div className="sidebar-version-tag">Version 0.1.0</div>
         </div>
       </aside>
 
@@ -502,25 +496,18 @@ export default function App() {
             </h2>
             <p className="tool-description">
               {activeTool === "merge" &&
-                "Drag & drop multiple PDFs to combine them into one seamless document with automatic deduplication."}
+                "Combine multiple PDFs into one document in your preferred order."}
               {activeTool === "split" &&
-                "Extract specific page ranges or create custom splits instantly without re-encoding."}
+                "Extract specific pages or page ranges into a separate document."}
               {activeTool === "rotate" &&
-                "Visually rotate individual pages or entire documents with real-time preview."}
+                "Rotate specific pages or entire documents to the correct orientation."}
               {activeTool === "compress" &&
-                "Shrink document file size with pure Rust stream compression and font deduplication."}
+                "Reduce PDF file size by optimizing document streams and removing redundancy."}
               {activeTool === "img2pdf" &&
-                "Combine PNG, JPG, or WebP images into a single professional PDF document."}
+                "Convert images into a unified PDF document."}
               {activeTool === "inspect" &&
-                "Inspect document structure, verify metadata, and strip sensitive tracking tags."}
+                "View document properties or clear author and software metadata."}
             </p>
-          </div>
-          <div className="header-privacy-badge">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-            Zero Cloud Uploads
           </div>
         </header>
 
@@ -1078,8 +1065,8 @@ export default function App() {
               {!inspectDoc ? (
                 <DropZone
                   multiple={false}
-                  title="Drag & drop a PDF to inspect & sanitize"
-                  subtitle="Audit tracking tags, author metadata, and strip privacy markers"
+                  title="Drag & drop a PDF to inspect properties"
+                  subtitle="View document information or remove author and software details"
                   onFilesSelected={handleIncomingPaths}
                 />
               ) : (
@@ -1094,11 +1081,11 @@ export default function App() {
 
                   <div className="options-panel">
                     <div className="panel-header-with-badge">
-                      <h4 className="panel-title">Document Metadata Audit</h4>
+                      <h4 className="panel-title">Document Properties</h4>
                       <span className="audit-badge">
                         {inspectMeta?.author || inspectMeta?.creator
-                          ? "Tracking Data Detected"
-                          : "Clean / No Tracking"}
+                          ? "Metadata Present"
+                          : "Empty"}
                       </span>
                     </div>
 
@@ -1132,9 +1119,9 @@ export default function App() {
 
                   <DestinationSelector
                     outputPath={sanitizeOutput}
-                    defaultFilename={`${inspectDoc.filename.replace(/\.pdf$/i, "")}_sanitized.pdf`}
+                    defaultFilename={`${inspectDoc.filename.replace(/\.pdf$/i, "")}_clean.pdf`}
                     onChange={setSanitizeOutput}
-                    label="Sanitized Output Destination"
+                    label="Cleaned Output Destination"
                   />
 
                   <div className="action-row">
@@ -1146,10 +1133,10 @@ export default function App() {
                     >
                       {isProcessing ? (
                         <span className="spinner-label">
-                          <span className="spinner" /> Stripping Metadata...
+                          <span className="spinner" /> Cleaning Document...
                         </span>
                       ) : (
-                        "Strip Metadata & Sanitize Document"
+                        "Clear Metadata & Save"
                       )}
                     </button>
                   </div>

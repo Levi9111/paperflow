@@ -132,7 +132,7 @@ export const DropZone: React.FC<DropZoneProps> = ({
           Browse Files
         </button>
         <span className="dropzone-badge">
-          Supports {extensions.map((ext) => `.${ext}`).join(", ")} • 100% On-Device
+          Supports {extensions.map((ext) => `.${ext}`).join(", ")}
         </span>
       </div>
     </div>
