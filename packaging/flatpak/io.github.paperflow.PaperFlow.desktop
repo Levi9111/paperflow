@@ -2,16 +2,16 @@
 Version=1.0
 Type=Application
 Name=PaperFlow
-GenericName=PDF Manager & Studio
-Comment=Your PDFs. Your device. Nothing uploaded. Fast, private, on-device PDF management.
+GenericName=PDF Studio
+Comment=Fast, personal, on-device PDF management and manipulation studio
 Exec=paperflow %U
 Icon=io.github.paperflow.PaperFlow
 Terminal=false
 Categories=Office;Utility;
 MimeType=application/pdf;
-Keywords=PDF;Merge;Split;Compress;Organize;Watermark;Viewer;
+Keywords=PDF;Merge;Split;Rotate;Compress;Images;Studio;
 StartupNotify=true
-Actions=Merge;Split;Compress;
+Actions=Merge;Split;Rotate;Compress;Images;
 
 [Desktop Action Merge]
 Name=Merge PDFs
@@ -21,6 +21,14 @@ Exec=paperflow --tool=merge
 Name=Split PDF
 Exec=paperflow --tool=split
 
+[Desktop Action Rotate]
+Name=Rotate Pages
+Exec=paperflow --tool=rotate
+
 [Desktop Action Compress]
 Name=Compress PDF
 Exec=paperflow --tool=compress
+
+[Desktop Action Images]
+Name=Images to PDF
+Exec=paperflow --tool=img2pdf

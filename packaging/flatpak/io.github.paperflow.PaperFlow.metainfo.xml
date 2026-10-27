@@ -4,21 +4,19 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <name>PaperFlow</name>
-  <summary>Privacy-first, fully on-device PDF management suite</summary>
+  <summary>Fast, personal, on-device PDF management studio</summary>
   <description>
     <p>
-      PaperFlow is a modern, fast, and 100% offline PDF manager for Fedora Linux and Android.
-      Unlike web services that upload sensitive files to remote servers, PaperFlow performs
-      all PDF operations locally on your hardware.
+      PaperFlow is a clean, modern desktop PDF studio built for Linux and Android.
+      All operations are processed natively and directly on your device with pure Rust performance.
     </p>
     <ul>
-      <li>Merge multiple PDFs with custom ordering and page ranges</li>
-      <li>Split PDFs by custom page numbers, intervals, or burst into single pages</li>
-      <li>Visual interactive page organizer to reorder, rotate 90°, and delete pages</li>
-      <li>Smart compression with Extreme, Recommended, and High-Quality presets</li>
-      <li>Convert images (JPG, PNG, WebP) to PDF and rasterize PDFs to high-res images</li>
-      <li>Diagonal text watermark stamps with adjustable opacity and sizing</li>
-      <li>Fast interactive document viewer with zoom and direct printing</li>
+      <li>Merge multiple PDFs with intuitive drag-and-drop sequencing</li>
+      <li>Extract page ranges or burst documents cleanly</li>
+      <li>Rotate individual pages or entire documents with real-time interactive preview</li>
+      <li>Compress files with Extreme, Recommended, and High-Quality profiles</li>
+      <li>Convert PNG, JPG, and WebP images to multi-page PDFs</li>
+      <li>Inspect document structure and clear metadata for sharing</li>
     </ul>
   </description>
   <launchable type="desktop-id">io.github.paperflow.PaperFlow.desktop</launchable>
@@ -31,9 +29,9 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
-    <release version="1.0.0" date="2026-10-26">
+    <release version="0.1.0" date="2026-10-27">
       <description>
-        <p>Initial release of PaperFlow with core offline PDF tools: Merge, Split, Organize, Compress, Image Conversion, and Watermark.</p>
+        <p>Release with native drag-and-drop workspace, dark obsidian UI, pure Rust manipulation engine, and desktop file dialog integrations.</p>
       </description>
     </release>
   </releases>
