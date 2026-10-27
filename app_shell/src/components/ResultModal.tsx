@@ -1,5 +1,6 @@
 import React from "react";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { isTauriEnvironment } from "../utils/platform";
 
 interface ResultModalProps {
   title: string;
@@ -18,21 +19,29 @@ export const ResultModal: React.FC<ResultModalProps> = ({
 }) => {
   const handleOpenPdf = async () => {
     if (outputPath) {
-      try {
-        await openPath(outputPath);
-      } catch (err) {
-        console.error("Open path error:", err);
+      if (isTauriEnvironment()) {
+        try {
+          await openPath(outputPath);
+          return;
+        } catch (err) {
+          console.error("Open path error:", err);
+        }
       }
+      alert(`Document path: ${outputPath}\n\n(In desktop mode, this automatically launches your system PDF viewer)`);
     }
   };
 
   const handleReveal = async () => {
     if (outputPath) {
-      try {
-        await revealItemInDir(outputPath);
-      } catch (err) {
-        console.error("Reveal item error:", err);
+      if (isTauriEnvironment()) {
+        try {
+          await revealItemInDir(outputPath);
+          return;
+        } catch (err) {
+          console.error("Reveal item error:", err);
+        }
       }
+      alert(`Output location:\n${outputPath}\n\n(In desktop mode, this opens the folder in your file manager)`);
     }
   };
 

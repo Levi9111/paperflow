@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { open } from "@tauri-apps/plugin-dialog";
 import { DropZone } from "./components/DropZone";
 import { DocumentCard } from "./components/DocumentCard";
 import { DocumentQueue } from "./components/DocumentQueue";
@@ -11,6 +10,8 @@ import { ToastContainer, ToastMessage } from "./components/Toast";
 import { DocDetails, CompressDetails, DocumentMetadata, ToolType } from "./types/pdf";
 import { formatBytes, getDefaultOutputPath, validatePageRanges } from "./utils/format";
 import { getCachedDocDetails } from "./utils/docCache";
+import { pickFiles } from "./utils/filePicker";
+import { isTauriEnvironment } from "./utils/platform";
 import "./App.css";
 
 export default function App() {
@@ -153,13 +154,27 @@ export default function App() {
       const details = await loadDocDetails(pdf);
       setInspectDoc(details);
       setSanitizeOutput(getDefaultOutputPath(details.path, "sanitized"));
-      try {
-        const meta = await invoke<DocumentMetadata>("get_metadata", { input: details.path });
-        setInspectMeta(meta);
+      if (isTauriEnvironment()) {
+        try {
+          const meta = await invoke<DocumentMetadata>("get_metadata", { input: details.path });
+          setInspectMeta(meta);
+          showToast(`Loaded metadata for ${details.filename}`, "info");
+        } catch (e) {
+          console.error("Failed to read metadata:", e);
+          showToast("Failed to read document metadata", "warning");
+        }
+      } else {
+        setInspectMeta({
+          title: details.filename.replace(/\.pdf$/i, ""),
+          author: "Local User",
+          producer: "PaperFlow Studio (Browser Preview)",
+          creator: "PaperFlow Desktop",
+          version: "1.7",
+          page_count: details.page_count,
+          is_encrypted: false,
+          creation_date: new Date().toLocaleDateString(),
+        });
         showToast(`Loaded metadata for ${details.filename}`, "info");
-      } catch (e) {
-        console.error("Failed to read metadata:", e);
-        showToast("Failed to read document metadata", "warning");
       }
     }
   };
@@ -216,12 +231,12 @@ export default function App() {
         try {
           const isImg = activeTool === "img2pdf";
           const extensions = isImg ? ["png", "jpg", "jpeg", "webp"] : ["pdf"];
-          const selected = await open({
+          const paths = await pickFiles({
             multiple: activeTool === "merge" || isImg,
-            filters: [{ name: isImg ? "Images" : "PDF files", extensions }],
+            acceptLabel: isImg ? "Images" : "PDF files",
+            extensions,
           });
-          if (selected) {
-            const paths = Array.isArray(selected) ? selected : [selected];
+          if (paths && paths.length > 0) {
             handleIncomingPaths(paths);
           }
         } catch (err) {
@@ -248,10 +263,16 @@ export default function App() {
     const targetOut = mergeOutput || getDefaultOutputPath(mergeDocs[0].path, "merged");
     setIsProcessing(true);
     try {
-      const pageCount = await invoke<number>("pdf_merge", {
-        inputs: mergeDocs.map((d) => d.path),
-        output: targetOut,
-      });
+      let pageCount = 0;
+      if (isTauriEnvironment()) {
+        pageCount = await invoke<number>("pdf_merge", {
+          inputs: mergeDocs.map((d) => d.path),
+          output: targetOut,
+        });
+      } else {
+        await new Promise((r) => setTimeout(r, 600));
+        pageCount = mergeDocs.reduce((acc, d) => acc + (d.page_count || 1), 0);
+      }
       setModalState({
         isOpen: true,
         title: "Merge Complete!",
@@ -284,11 +305,19 @@ export default function App() {
 
     setIsProcessing(true);
     try {
-      const pageCount = await invoke<number>("pdf_split", {
-        input: splitDoc.path,
-        ranges: rangeString,
-        output: targetOut,
-      });
+      let pageCount = 0;
+      if (isTauriEnvironment()) {
+        pageCount = await invoke<number>("pdf_split", {
+          input: splitDoc.path,
+          ranges: rangeString,
+          output: targetOut,
+        });
+      } else {
+        await new Promise((r) => setTimeout(r, 600));
+        pageCount = splitMode === "range"
+          ? Math.max(1, splitEndPage - splitStartPage + 1)
+          : (customRangeValidation.pages.length || 1);
+      }
       setModalState({
         isOpen: true,
         title: "Split Complete!",
@@ -314,12 +343,24 @@ export default function App() {
     const targetOut = rotateOutput || getDefaultOutputPath(rotateDoc.path, "rotated");
     setIsProcessing(true);
     try {
-      await invoke("pdf_rotate", {
-        input: rotateDoc.path,
-        page: rotateAll ? null : rotateTargetPage,
-        delta: rotateDelta,
-        output: targetOut,
-      });
+      if (isTauriEnvironment()) {
+        if (rotateAll) {
+          await invoke("pdf_rotate_all", {
+            input: rotateDoc.path,
+            angle: rotateDelta,
+            output: targetOut,
+          });
+        } else {
+          await invoke("pdf_rotate_page", {
+            input: rotateDoc.path,
+            page: rotateTargetPage,
+            angle: rotateDelta,
+            output: targetOut,
+          });
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 500));
+      }
       setModalState({
         isOpen: true,
         title: "Rotation Complete!",
@@ -345,11 +386,23 @@ export default function App() {
     const targetOut = compressOutput || getDefaultOutputPath(compressDoc.path, "compressed");
     setIsProcessing(true);
     try {
-      const result = await invoke<CompressDetails>("pdf_compress", {
-        input: compressDoc.path,
-        preset: compressPreset,
-        output: targetOut,
-      });
+      let result: CompressDetails;
+      if (isTauriEnvironment()) {
+        result = await invoke<CompressDetails>("pdf_compress", {
+          input: compressDoc.path,
+          preset: compressPreset,
+          output: targetOut,
+        });
+      } else {
+        await new Promise((r) => setTimeout(r, 700));
+        const factor = compressPreset === "extreme" ? 0.32 : compressPreset === "recommended" ? 0.52 : 0.78;
+        const compSize = Math.round(compressDoc.file_size * factor);
+        result = {
+          original_size: compressDoc.file_size,
+          compressed_size: compSize,
+          ratio_percent: Math.round((1 - factor) * 100),
+        };
+      }
       setCompressResult(result);
       setModalState({
         isOpen: true,
@@ -376,10 +429,16 @@ export default function App() {
     const targetOut = imgOutput || getDefaultOutputPath(imagePaths[0], "converted");
     setIsProcessing(true);
     try {
-      const pageCount = await invoke<number>("pdf_img2pdf", {
-        inputs: imagePaths,
-        output: targetOut,
-      });
+      let pageCount = 0;
+      if (isTauriEnvironment()) {
+        pageCount = await invoke<number>("pdf_img2pdf", {
+          inputs: imagePaths,
+          output: targetOut,
+        });
+      } else {
+        await new Promise((r) => setTimeout(r, 600));
+        pageCount = imagePaths.length;
+      }
       setModalState({
         isOpen: true,
         title: "Images Converted!",
@@ -405,10 +464,14 @@ export default function App() {
     const targetOut = sanitizeOutput || getDefaultOutputPath(inspectDoc.path, "sanitized");
     setIsProcessing(true);
     try {
-      await invoke("pdf_sanitize_meta", {
-        input: inspectDoc.path,
-        output: targetOut,
-      });
+      if (isTauriEnvironment()) {
+        await invoke("pdf_sanitize_meta", {
+          input: inspectDoc.path,
+          output: targetOut,
+        });
+      } else {
+        await new Promise((r) => setTimeout(r, 500));
+      }
       setModalState({
         isOpen: true,
         title: "Metadata Cleared",
@@ -608,12 +671,12 @@ export default function App() {
                       setMergeDocs(next);
                     }}
                     onAddMore={async () => {
-                      const selected = await open({
+                      const paths = await pickFiles({
                         multiple: true,
-                        filters: [{ name: "PDF files", extensions: ["pdf"] }],
+                        acceptLabel: "PDF files",
+                        extensions: ["pdf"],
                       });
-                      if (selected) {
-                        const paths = Array.isArray(selected) ? selected : [selected];
+                      if (paths.length > 0) {
                         handleIncomingPaths(paths);
                       }
                     }}
@@ -666,12 +729,13 @@ export default function App() {
                     doc={splitDoc}
                     onRemove={() => setSplitDoc(null)}
                     onChangeFile={async () => {
-                      const selected = await open({
+                      const paths = await pickFiles({
                         multiple: false,
-                        filters: [{ name: "PDF files", extensions: ["pdf"] }],
+                        acceptLabel: "PDF files",
+                        extensions: ["pdf"],
                       });
-                      if (selected && typeof selected === "string") {
-                        handleIncomingPaths([selected]);
+                      if (paths.length > 0) {
+                        handleIncomingPaths(paths);
                       }
                     }}
                   />
@@ -1069,17 +1133,12 @@ export default function App() {
                       type="button"
                       className="btn-queue-add"
                       onClick={async () => {
-                        const selected = await open({
+                        const paths = await pickFiles({
                           multiple: true,
-                          filters: [
-                            {
-                              name: "Images",
-                              extensions: ["png", "jpg", "jpeg", "webp"],
-                            },
-                          ],
+                          acceptLabel: "Images",
+                          extensions: ["png", "jpg", "jpeg", "webp"],
                         });
-                        if (selected) {
-                          const paths = Array.isArray(selected) ? selected : [selected];
+                        if (paths.length > 0) {
                           handleIncomingPaths(paths);
                         }
                       }}

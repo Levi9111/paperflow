@@ -1,5 +1,6 @@
 import React from "react";
 import { save } from "@tauri-apps/plugin-dialog";
+import { isTauriEnvironment } from "../utils/platform";
 
 interface DestinationSelectorProps {
   outputPath: string;
@@ -15,16 +16,26 @@ export const DestinationSelector: React.FC<DestinationSelectorProps> = ({
   label = "Output Destination",
 }) => {
   const handleBrowseDestination = async () => {
-    try {
-      const selected = await save({
-        defaultPath: outputPath || defaultFilename,
-        filters: [{ name: "PDF Document", extensions: ["pdf"] }],
-      });
-      if (selected) {
-        onChange(selected);
+    if (isTauriEnvironment()) {
+      try {
+        const selected = await save({
+          defaultPath: outputPath || defaultFilename,
+          filters: [{ name: "PDF Document", extensions: ["pdf"] }],
+        });
+        if (selected) {
+          onChange(selected);
+          return;
+        }
+      } catch (err) {
+        console.warn("Save dialog error, falling back to prompt:", err);
       }
-    } catch (err) {
-      console.error("Save dialog error:", err);
+    }
+
+    // In a browser, prompt for destination or custom filename
+    const suggested = outputPath || defaultFilename;
+    const name = window.prompt("Enter output destination filename:", suggested);
+    if (name) {
+      onChange(name.endsWith(".pdf") ? name : `${name}.pdf`);
     }
   };
 

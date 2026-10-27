@@ -1,5 +1,7 @@
-import React, { useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
+import React, { useState, useRef } from "react";
+import { pickFiles } from "../utils/filePicker";
+import { registerBrowserFile } from "../utils/docCache";
+import { isTauriEnvironment } from "../utils/platform";
 
 interface DropZoneProps {
   onFilesSelected: (paths: string[]) => void;
@@ -21,24 +23,33 @@ export const DropZone: React.FC<DropZoneProps> = ({
   compact = false,
 }) => {
   const [isOver, setIsOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleBrowse = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      const selected = await open({
-        multiple,
-        filters: [{ name: acceptLabel, extensions }],
-      });
-      if (selected) {
-        if (Array.isArray(selected)) {
-          onFilesSelected(selected);
-        } else {
-          onFilesSelected([selected]);
+
+    if (isTauriEnvironment()) {
+      try {
+        const paths = await pickFiles({ multiple, acceptLabel, extensions });
+        if (paths && paths.length > 0) {
+          onFilesSelected(paths);
+          return;
         }
+      } catch (err) {
+        console.warn("Tauri picker failed, falling back to browser input:", err);
       }
-    } catch (err) {
-      console.error("File dialog error:", err);
     }
+
+    // Direct browser input fallback
+    fileInputRef.current?.click();
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const paths = files.map((f) => registerBrowserFile(f));
+    onFilesSelected(paths);
+    e.target.value = "";
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -58,15 +69,10 @@ export const DropZone: React.FC<DropZoneProps> = ({
     e.stopPropagation();
     setIsOver(false);
 
-    // If Tauri webview exposes file paths through dataTransfer files
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    const paths: string[] = [];
-    for (const f of droppedFiles) {
-      // In Tauri / Electron, File object may have .path property
-      const p = (f as any).path || (f as any).name;
-      if (p) paths.push(p);
-    }
+    const droppedFiles = Array.from(e.dataTransfer.files || []);
+    if (droppedFiles.length === 0) return;
 
+    const paths = droppedFiles.map((f) => registerBrowserFile(f));
     if (paths.length > 0) {
       if (!multiple) {
         onFilesSelected([paths[0]]);
@@ -91,6 +97,16 @@ export const DropZone: React.FC<DropZoneProps> = ({
         }
       }}
     >
+      {/* Hidden browser input element */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        style={{ display: "none" }}
+        multiple={multiple}
+        accept={extensions.map((ext) => `.${ext.replace(/^\./, "")}`).join(",")}
+        onChange={handleFileInputChange}
+      />
+
       <div className="dropzone-glow" />
       <div className="dropzone-content">
         <div className="dropzone-icon-wrapper">
@@ -132,7 +148,7 @@ export const DropZone: React.FC<DropZoneProps> = ({
           Browse Files
         </button>
         <span className="dropzone-badge">
-          Supports {extensions.map((ext) => `.${ext}`).join(", ")}
+          Supports {extensions.map((ext) => `.${ext.replace(/^\./, "")}`).join(", ")}
         </span>
       </div>
     </div>
