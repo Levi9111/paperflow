@@ -9,6 +9,7 @@ import { DestinationSelector } from "./components/DestinationSelector";
 import { ResultModal } from "./components/ResultModal";
 import { DocDetails, CompressDetails, DocumentMetadata, ToolType } from "./types/pdf";
 import { formatBytes, getDefaultOutputPath } from "./utils/format";
+import { getCachedDocDetails } from "./utils/docCache";
 import "./App.css";
 
 export default function App() {
@@ -65,20 +66,8 @@ export default function App() {
     message: "",
   });
 
-  // Query document details helper
-  const loadDocDetails = async (path: string): Promise<DocDetails> => {
-    try {
-      return await invoke<DocDetails>("get_doc_details", { path });
-    } catch {
-      const filename = path.replace(/\\/g, "/").split("/").pop() || "document.pdf";
-      return {
-        path,
-        filename,
-        page_count: 1,
-        file_size: 0,
-      };
-    }
-  };
+  // Query document details helper (cached)
+  const loadDocDetails = (path: string): Promise<DocDetails> => getCachedDocDetails(path);
 
   // Handle paths dropped via native window drag or dropzone
   const handleIncomingPaths = async (paths: string[]) => {
