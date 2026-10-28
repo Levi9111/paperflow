@@ -2338,6 +2338,12 @@ body {
   color: #ced6e0;
 }
 
+.badge-action-edit {
+  background: rgba(139, 92, 246, 0.16);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  color: #a78bfa;
+}
+
 .badge-action-default {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -3246,6 +3252,385 @@ body {
   border-top-color: var(--coral);
   border-radius: 50%;
   animation: fluentSpin 0.8s linear infinite;
+}
+
+/* ================= PDF Annotation & Markup Toolbar ================= */
+
+.viewer-edit-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 14px;
+  background: rgba(22, 27, 38, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  z-index: 9;
+  flex-wrap: wrap;
+  animation: fluentFadeIn 0.16s ease;
+}
+
+.edit-tools-group,
+.edit-styles-group,
+.edit-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-edit-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.btn-edit-tool:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: #ffffff;
+}
+
+.btn-edit-tool.active {
+  background: rgba(255, 71, 87, 0.16);
+  border-color: rgba(255, 71, 87, 0.4);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.color-palette {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.color-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.12s ease;
+}
+
+.color-swatch:hover {
+  transform: scale(1.15);
+}
+
+.color-swatch.active {
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 2px var(--coral);
+}
+
+.font-size-select {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-xs);
+  color: #ffffff;
+  font-size: 11px;
+  padding: 3px 6px;
+  outline: none;
+}
+
+.btn-font-toggle {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-size: 11.5px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.btn-font-toggle.active {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.btn-save-edited {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--coral);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-xs);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.btn-save-edited:hover:not(:disabled) {
+  background: var(--coral-hover, #ff5e6c);
+  transform: translateY(-1px);
+}
+
+.btn-save-edited:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.spinner-mini {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: fluentSpin 0.7s linear infinite;
+}
+
+/* Page Annotation Overlay */
+.canvas-and-overlay-container {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+}
+
+.page-annotation-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 5;
+}
+
+.page-annotation-overlay.tool-text,
+.page-annotation-overlay.tool-whiteout,
+.page-annotation-overlay.tool-draw,
+.page-annotation-overlay.tool-highlight {
+  pointer-events: auto;
+}
+
+.page-annotation-overlay.tool-text {
+  cursor: text;
+}
+
+.page-annotation-overlay.tool-whiteout {
+  cursor: crosshair;
+}
+
+.page-annotation-overlay.tool-draw,
+.page-annotation-overlay.tool-highlight {
+  cursor: crosshair;
+}
+
+/* Annotation Elements */
+.annot-whiteout-box {
+  position: absolute;
+  border: 1px dashed rgba(255, 71, 87, 0.5);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  pointer-events: auto;
+  z-index: 6;
+}
+
+.annot-text-box {
+  position: absolute;
+  pointer-events: auto;
+  line-height: 1.2;
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed rgba(255, 71, 87, 0.4);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.annot-text-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  font-family: inherit;
+  min-width: 80px;
+}
+
+.annot-sig-box {
+  position: absolute;
+  pointer-events: auto;
+  z-index: 7;
+  border: 1px dashed rgba(255, 71, 87, 0.4);
+}
+
+.annot-sig-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.annot-delete-btn {
+  background: #ff4757;
+  color: #ffffff;
+  border: none;
+  border-radius: 50%;
+  width: 14px;
+  height: 14px;
+  font-size: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  opacity: 0.8;
+  transition: opacity 0.12s ease;
+}
+
+.annot-delete-btn:hover {
+  opacity: 1;
+}
+
+.whiteout-drag-preview {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px dashed #ff4757;
+  pointer-events: none;
+  z-index: 8;
+}
+
+.annot-drawing-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* Signature Modal */
+.sig-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: fluentFadeIn 0.18s ease;
+}
+
+.sig-modal-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-sm);
+  padding: 20px;
+  width: 480px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sig-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sig-modal-header h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0;
+}
+
+.sig-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sig-close-btn:hover {
+  color: #ffffff;
+}
+
+.sig-modal-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.sig-canvas-wrap {
+  background: #ffffff;
+  border-radius: var(--radius-xs);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.signature-pad-canvas {
+  cursor: crosshair;
+  border-radius: var(--radius-xs);
+}
+
+.sig-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.btn-sig-clear {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.btn-sig-clear:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.btn-sig-apply {
+  background: var(--coral);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.btn-sig-apply:hover {
+  background: var(--coral-hover, #ff5e6c);
 }
 
 

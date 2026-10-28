@@ -194,6 +194,8 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
         return "badge-action-img2pdf";
       case "sanitize":
         return "badge-action-sanitize";
+      case "edit":
+        return "badge-action-edit";
       default:
         return "badge-action-default";
     }
@@ -252,6 +254,13 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
         );
+      case "edit":
+        return (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+          </svg>
+        );
       default:
         return (
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -266,6 +275,7 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
 
   const filterTabs = [
     { id: "all", label: "All" },
+    { id: "edit", label: "Edited" },
     { id: "merge", label: "Merged" },
     { id: "split", label: "Split" },
     { id: "rotate", label: "Rotated" },

@@ -38,7 +38,7 @@ export type ToolType =
   | "viewer"
   | "history";
 
-export type ProcessedActionType = "merge" | "split" | "rotate" | "compress" | "img2pdf" | "sanitize";
+export type ProcessedActionType = "merge" | "split" | "rotate" | "compress" | "img2pdf" | "sanitize" | "edit";
 
 export interface ProcessedFileRecord {
   id: string;
