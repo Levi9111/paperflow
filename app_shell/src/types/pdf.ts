@@ -35,6 +35,7 @@ export type ToolType =
   | "compress" 
   | "img2pdf" 
   | "inspect"
+  | "viewer"
   | "history";
 
 export type ProcessedActionType = "merge" | "split" | "rotate" | "compress" | "img2pdf" | "sanitize";

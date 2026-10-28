@@ -15,12 +15,14 @@ interface ActionFeedbackBannerProps {
   feedback: ActionFeedbackData | null;
   onDismiss: () => void;
   onViewHistory?: () => void;
+  onViewPdf?: (path: string) => void;
 }
 
 export const ActionFeedbackBanner: React.FC<ActionFeedbackBannerProps> = ({
   feedback,
   onDismiss,
   onViewHistory,
+  onViewPdf,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -109,16 +111,30 @@ export const ActionFeedbackBanner: React.FC<ActionFeedbackBannerProps> = ({
       <div className="feedback-actions-right">
         {feedback.outputPath && isSuccess && (
           <>
+            {onViewPdf && (
+              <button
+                type="button"
+                className="btn-feedback-action primary"
+                onClick={() => onViewPdf(feedback.outputPath!)}
+                title="Preview document in PaperFlow"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                Preview
+              </button>
+            )}
             <button
               type="button"
-              className="btn-feedback-action primary"
+              className="btn-feedback-action secondary"
               onClick={handleOpenPdf}
               title="Open document in system reader"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polygon points="5 3 19 12 5 21 5 3" />
               </svg>
-              Open PDF
+              Open
             </button>
             <button
               type="button"

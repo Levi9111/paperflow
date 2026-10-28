@@ -145,6 +145,26 @@ fn delete_file(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn read_file_binary(path: String) -> Result<Vec<u8>, String> {
+    let p = Path::new(&path);
+    if !p.exists() {
+        return Err(format!("File does not exist: {}", path));
+    }
+    std::fs::read(p).map_err(|e| format!("Failed to read file: {}", e))
+}
+
+#[tauri::command]
+fn write_file_binary(path: String, data: Vec<u8>) -> Result<(), String> {
+    let p = PathBuf::from(&path);
+    if let Some(parent) = p.parent() {
+        if !parent.exists() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+    }
+    std::fs::write(&p, data).map_err(|e| format!("Failed to save file: {}", e))
+}
+
+#[tauri::command]
 fn list_output_files(dir: String) -> Result<Vec<DocDetails>, String> {
     let p = Path::new(&dir);
     if !p.exists() {
@@ -355,6 +375,8 @@ pub fn run() {
             pdf_img2pdf,
             pdf_sanitize_meta,
             get_metadata,
+            read_file_binary,
+            write_file_binary,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

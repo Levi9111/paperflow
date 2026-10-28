@@ -16,6 +16,7 @@ interface HistoryTabProps {
   outputDir: string;
   onOutputDirChange: (newDir: string) => void;
   onNavigateToTool: (tool: ToolType, targetFilePath?: string) => void;
+  onViewPdf: (path: string) => void;
   onShowToast: (msg: string, type: "info" | "success" | "warning") => void;
 }
 
@@ -23,6 +24,7 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
   outputDir,
   onOutputDirChange,
   onNavigateToTool,
+  onViewPdf,
   onShowToast,
 }) => {
   const [records, setRecords] = useState<ProcessedFileRecord[]>([]);
@@ -516,13 +518,24 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
               <div className="history-item-actions">
                 <button
                   className="btn-item-action primary"
+                  onClick={() => onViewPdf(item.outputPath)}
+                  title="Preview document right inside PaperFlow"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <span>View</span>
+                </button>
+
+                <button
+                  className="btn-item-action"
                   onClick={() => handleOpenFile(item)}
-                  title="Open PDF in default viewer"
+                  title="Open in system default reader"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polygon points="5 3 19 12 5 21 5 3" />
                   </svg>
-                  <span>Open</span>
                 </button>
 
                 <button

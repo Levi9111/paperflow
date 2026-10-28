@@ -7,6 +7,7 @@ import { DocumentQueue } from "./components/DocumentQueue";
 import { DestinationSelector } from "./components/DestinationSelector";
 import { ActionFeedbackBanner, ActionFeedbackData } from "./components/ActionFeedbackBanner";
 import { HistoryTab } from "./components/HistoryTab";
+import { PdfViewer } from "./components/PdfViewer";
 import { ToastContainer, ToastMessage } from "./components/Toast";
 import { DocDetails, CompressDetails, DocumentMetadata, ToolType } from "./types/pdf";
 import {
@@ -95,6 +96,14 @@ export default function App() {
   const [inspectDoc, setInspectDoc] = useState<DocDetails | null>(null);
   const [inspectMeta, setInspectMeta] = useState<DocumentMetadata | null>(null);
   const [sanitizeOutput, setSanitizeOutput] = useState("");
+
+  // PDF Viewer state
+  const [viewerPath, setViewerPath] = useState<string | null>(null);
+
+  const handleViewPdf = (path: string) => {
+    setViewerPath(path);
+    setActiveTool("viewer");
+  };
 
   // Processing & In-Place Action Feedback State
   const [isProcessing, setIsProcessing] = useState(false);
@@ -260,7 +269,7 @@ export default function App() {
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key >= "1" && e.key <= "7") {
+      if ((e.ctrlKey || e.metaKey) && e.key >= "1" && e.key <= "8") {
         e.preventDefault();
         const toolList: ToolType[] = [
           "merge",
@@ -269,6 +278,7 @@ export default function App() {
           "compress",
           "img2pdf",
           "inspect",
+          "viewer",
           "history",
         ];
         const idx = parseInt(e.key) - 1;
@@ -782,6 +792,16 @@ export default function App() {
       ),
     },
     {
+      id: "viewer",
+      label: "PDF Viewer",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      ),
+    },
+    {
       id: "history",
       label: "Work History",
       badge: historyCount > 0 ? String(historyCount) : undefined,
@@ -863,6 +883,8 @@ export default function App() {
                 "Convert images into a unified PDF document."}
               {activeTool === "inspect" &&
                 "View document properties or clear author and software metadata."}
+              {activeTool === "viewer" &&
+                "Preview, read, and navigate PDF documents with fluid zoom and page thumbnails."}
               {activeTool === "history" &&
                 "Access, search, and manage your generated documents in one place."}
             </p>
@@ -876,6 +898,7 @@ export default function App() {
             feedback={actionFeedback}
             onDismiss={() => setActionFeedback(null)}
             onViewHistory={() => setActiveTool("history")}
+            onViewPdf={handleViewPdf}
           />
 
           {/* ================= MERGE TOOL ================= */}
@@ -1532,6 +1555,25 @@ export default function App() {
             </div>
           )}
 
+          {/* ================= PDF VIEWER TAB ================= */}
+          {activeTool === "viewer" && (
+            <PdfViewer
+              filePath={viewerPath}
+              onClose={() => setActiveTool("history")}
+              onNavigateToTool={handleNavigateToTool}
+              onSelectFile={async () => {
+                const paths = await pickFiles({
+                  multiple: false,
+                  acceptLabel: "PDF files",
+                  extensions: ["pdf"],
+                });
+                if (paths && paths[0]) {
+                  setViewerPath(paths[0]);
+                }
+              }}
+            />
+          )}
+
           {/* ================= WORK HISTORY TAB ================= */}
           {activeTool === "history" && (
             <HistoryTab
@@ -1541,6 +1583,7 @@ export default function App() {
                 setPreferredOutputDir(newDir);
               }}
               onNavigateToTool={handleNavigateToTool}
+              onViewPdf={handleViewPdf}
               onShowToast={showToast}
             />
           )}
