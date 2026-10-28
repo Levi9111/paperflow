@@ -1,6 +1,6 @@
 [package]
 name = "app_shell"
-version = "0.1.0"
+version = "0.2.0"
 description = "Privacy-First On-Device PDF Studio"
 authors = ["Shanjid Ahmad"]
 edition = "2021"
