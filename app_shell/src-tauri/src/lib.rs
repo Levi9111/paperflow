@@ -55,9 +55,136 @@ fn pdf_info(path: String) -> Result<usize, String> {
 }
 
 #[tauri::command]
+fn get_default_output_dir() -> Result<String, String> {
+    let base_dir = std::env::var("HOME")
+        .map(|h| PathBuf::from(h).join("Documents").join("PaperFlow"))
+        .unwrap_or_else(|_| std::env::temp_dir().join("PaperFlow"));
+
+    if !base_dir.exists() {
+        let _ = std::fs::create_dir_all(&base_dir);
+    }
+    Ok(base_dir.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn ensure_output_dir(dir: String) -> Result<String, String> {
+    let p = PathBuf::from(&dir);
+    if !p.exists() {
+        std::fs::create_dir_all(&p).map_err(|e| e.to_string())?;
+    }
+    Ok(dir)
+}
+
+#[tauri::command]
+fn open_folder(path: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    let target_dir = if p.is_dir() { p } else { p.parent().unwrap_or(p) };
+
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(target_dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(target_dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(target_dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn open_file(path: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    if !p.exists() {
+        return Err("File does not exist on disk".into());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(p)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/c", "start", "", &path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(p)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_file(path: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    if p.exists() {
+        std::fs::remove_file(p).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn list_output_files(dir: String) -> Result<Vec<DocDetails>, String> {
+    let p = Path::new(&dir);
+    if !p.exists() {
+        return Ok(Vec::new());
+    }
+    let mut files = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(p) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() && path.extension().and_then(|e| e.to_str()).map_or(false, |ext| ext.eq_ignore_ascii_case("pdf")) {
+                if let Ok(details) = get_doc_details(path.to_string_lossy().to_string()) {
+                    files.push(details);
+                }
+            }
+        }
+    }
+    files.sort_by(|a, b| {
+        let meta_a = std::fs::metadata(&a.path).and_then(|m| m.modified()).ok();
+        let meta_b = std::fs::metadata(&b.path).and_then(|m| m.modified()).ok();
+        meta_b.cmp(&meta_a)
+    });
+    Ok(files)
+}
+
+#[tauri::command]
 fn pdf_merge(inputs: Vec<String>, output: String) -> Result<usize, String> {
     let input_paths: Vec<PathBuf> = inputs.into_iter().map(PathBuf::from).collect();
     let out_path = PathBuf::from(&output);
+
+    // Strict non-destructive safeguard: never overwrite an input document
+    if input_paths.iter().any(|p| p == &out_path) {
+        return Err("Target output file cannot be the same as any input file. A new file must be created.".into());
+    }
+
+    if let Some(parent) = out_path.parent() {
+        if !parent.exists() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+    }
+
     let ctx = JobContext::new_noop(std::env::temp_dir());
 
     PaperFlowEngine::merge(&input_paths, &out_path, &ctx)
@@ -68,6 +195,17 @@ fn pdf_merge(inputs: Vec<String>, output: String) -> Result<usize, String> {
 fn pdf_split(input: String, ranges: String, output: String) -> Result<usize, String> {
     let in_path = PathBuf::from(&input);
     let out_path = PathBuf::from(&output);
+
+    if in_path == out_path {
+        return Err("Target output file cannot be the same as input file. A new file must be created.".into());
+    }
+
+    if let Some(parent) = out_path.parent() {
+        if !parent.exists() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+    }
+
     let ctx = JobContext::new_noop(std::env::temp_dir());
 
     let total = PaperFlowEngine::get_page_count(&in_path)
@@ -85,6 +223,16 @@ fn pdf_rotate(input: String, page: Option<u32>, delta: i64, output: String) -> R
     let in_path = PathBuf::from(&input);
     let out_path = PathBuf::from(&output);
 
+    if in_path == out_path {
+        return Err("Target output file cannot be the same as input file. A new file must be created.".into());
+    }
+
+    if let Some(parent) = out_path.parent() {
+        if !parent.exists() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+    }
+
     if let Some(p) = page {
         PaperFlowEngine::rotate_page(&in_path, p, delta, &out_path)
             .map_err(|e| e.to_string())
@@ -95,9 +243,30 @@ fn pdf_rotate(input: String, page: Option<u32>, delta: i64, output: String) -> R
 }
 
 #[tauri::command]
+fn pdf_rotate_all(input: String, angle: i64, output: String) -> Result<(), String> {
+    pdf_rotate(input, None, angle, output)
+}
+
+#[tauri::command]
+fn pdf_rotate_page(input: String, page: u32, angle: i64, output: String) -> Result<(), String> {
+    pdf_rotate(input, Some(page), angle, output)
+}
+
+#[tauri::command]
 fn pdf_compress(input: String, preset: String, output: String) -> Result<CompressDetails, String> {
     let in_path = PathBuf::from(&input);
     let out_path = PathBuf::from(&output);
+
+    if in_path == out_path {
+        return Err("Target output file cannot be the same as input file. A new file must be created.".into());
+    }
+
+    if let Some(parent) = out_path.parent() {
+        if !parent.exists() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+    }
+
     let ctx = JobContext::new_noop(std::env::temp_dir());
 
     let p = match preset.to_lowercase().as_str() {
@@ -127,6 +296,12 @@ fn pdf_img2pdf(inputs: Vec<String>, output: String) -> Result<usize, String> {
     let input_paths: Vec<PathBuf> = inputs.into_iter().map(PathBuf::from).collect();
     let out_path = PathBuf::from(&output);
 
+    if let Some(parent) = out_path.parent() {
+        if !parent.exists() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+    }
+
     ImageConverter::image_to_pdf(&input_paths, &out_path)
         .map_err(|e| e.to_string())
 }
@@ -135,6 +310,16 @@ fn pdf_img2pdf(inputs: Vec<String>, output: String) -> Result<usize, String> {
 fn pdf_sanitize_meta(input: String, output: String) -> Result<(), String> {
     let in_path = PathBuf::from(&input);
     let out_path = PathBuf::from(&output);
+
+    if in_path == out_path {
+        return Err("Target output file cannot be the same as input file. A new file must be created.".into());
+    }
+
+    if let Some(parent) = out_path.parent() {
+        if !parent.exists() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+    }
 
     DocumentMetadata::sanitize_and_save(&in_path, &out_path)
         .map_err(|e| e.to_string())
@@ -155,9 +340,17 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_doc_details,
             pdf_info,
+            get_default_output_dir,
+            ensure_output_dir,
+            open_folder,
+            open_file,
+            delete_file,
+            list_output_files,
             pdf_merge,
             pdf_split,
             pdf_rotate,
+            pdf_rotate_all,
+            pdf_rotate_page,
             pdf_compress,
             pdf_img2pdf,
             pdf_sanitize_meta,

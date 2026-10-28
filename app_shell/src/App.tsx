@@ -6,16 +6,31 @@ import { DocumentCard } from "./components/DocumentCard";
 import { DocumentQueue } from "./components/DocumentQueue";
 import { DestinationSelector } from "./components/DestinationSelector";
 import { ResultModal } from "./components/ResultModal";
+import { HistoryTab } from "./components/HistoryTab";
 import { ToastContainer, ToastMessage } from "./components/Toast";
 import { DocDetails, CompressDetails, DocumentMetadata, ToolType } from "./types/pdf";
-import { formatBytes, getDefaultOutputPath, validatePageRanges } from "./utils/format";
+import {
+  formatBytes,
+  generateDedicatedOutputPath,
+  validatePageRanges,
+} from "./utils/format";
 import { getCachedDocDetails } from "./utils/docCache";
+import {
+  getDefaultOutputDir,
+  addHistoryRecord,
+  setPreferredOutputDir,
+  getHistoryRecords,
+} from "./utils/historyStore";
 import { pickFiles } from "./utils/filePicker";
 import { isTauriEnvironment } from "./utils/platform";
 import "./App.css";
 
 export default function App() {
   const [activeTool, setActiveTool] = useState<ToolType>("merge");
+
+  // Output storage directory & history tracking
+  const [outputDir, setOutputDir] = useState<string>("");
+  const [historyCount, setHistoryCount] = useState<number>(() => getHistoryRecords().length);
 
   // Global window drag state
   const [isWindowDragging, setIsWindowDragging] = useState(false);
@@ -31,6 +46,16 @@ export default function App() {
   const dismissToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
+
+  // Sync output directory and history badge on mount & updates
+  useEffect(() => {
+    getDefaultOutputDir().then((dir) => setOutputDir(dir));
+    const handleHistoryUpdate = () => {
+      setHistoryCount(getHistoryRecords().length);
+    };
+    window.addEventListener("paperflow_history_updated", handleHistoryUpdate);
+    return () => window.removeEventListener("paperflow_history_updated", handleHistoryUpdate);
+  }, []);
 
   // Merge state
   const [mergeDocs, setMergeDocs] = useState<DocDetails[]>([]);
@@ -99,7 +124,7 @@ export default function App() {
       setMergeDocs((prev) => {
         const next = [...prev, ...loaded];
         if (!mergeOutput && next.length > 0) {
-          setMergeOutput(getDefaultOutputPath(next[0].path, "merged"));
+          setMergeOutput(generateDedicatedOutputPath(outputDir, next[0].filename, "merged"));
         }
         return next;
       });
@@ -111,7 +136,7 @@ export default function App() {
       setSplitDoc(details);
       setSplitStartPage(1);
       setSplitEndPage(Math.min(details.page_count, 3));
-      setSplitOutput(getDefaultOutputPath(details.path, "split"));
+      setSplitOutput(generateDedicatedOutputPath(outputDir, details.filename, "split"));
       showToast(`Loaded ${details.filename} (${details.page_count} pages)`, "info");
     } else if (activeTool === "rotate") {
       const pdf = paths.find((p) => p.toLowerCase().endsWith(".pdf"));
@@ -119,7 +144,7 @@ export default function App() {
       const details = await loadDocDetails(pdf);
       setRotateDoc(details);
       setRotateTargetPage(1);
-      setRotateOutput(getDefaultOutputPath(details.path, "rotated"));
+      setRotateOutput(generateDedicatedOutputPath(outputDir, details.filename, "rotated"));
       showToast(`Loaded ${details.filename} (${details.page_count} pages)`, "info");
     } else if (activeTool === "compress") {
       const pdf = paths.find((p) => p.toLowerCase().endsWith(".pdf"));
@@ -127,7 +152,7 @@ export default function App() {
       const details = await loadDocDetails(pdf);
       setCompressDoc(details);
       setCompressResult(null);
-      setCompressOutput(getDefaultOutputPath(details.path, "compressed"));
+      setCompressOutput(generateDedicatedOutputPath(outputDir, details.filename, "compressed"));
       showToast(`Loaded ${details.filename} (${formatBytes(details.file_size)})`, "info");
     } else if (activeTool === "img2pdf") {
       const validImages = paths.filter((p) => {
@@ -143,7 +168,7 @@ export default function App() {
       setImagePaths((prev) => {
         const next = [...prev, ...validImages];
         if (!imgOutput && next.length > 0) {
-          setImgOutput(getDefaultOutputPath(next[0], "converted"));
+          setImgOutput(generateDedicatedOutputPath(outputDir, "Converted_Images", "converted"));
         }
         return next;
       });
@@ -153,7 +178,7 @@ export default function App() {
       if (!pdf) return;
       const details = await loadDocDetails(pdf);
       setInspectDoc(details);
-      setSanitizeOutput(getDefaultOutputPath(details.path, "sanitized"));
+      setSanitizeOutput(generateDedicatedOutputPath(outputDir, details.filename, "sanitized"));
       if (isTauriEnvironment()) {
         try {
           const meta = await invoke<DocumentMetadata>("get_metadata", { input: details.path });
@@ -176,6 +201,43 @@ export default function App() {
         });
         showToast(`Loaded metadata for ${details.filename}`, "info");
       }
+    }
+  };
+
+  // Cross-navigation helper to preload files into tools from History
+  const handleNavigateToTool = async (tool: ToolType, targetFilePath?: string) => {
+    setActiveTool(tool);
+    if (!targetFilePath) return;
+
+    try {
+      const details = await loadDocDetails(targetFilePath);
+      if (tool === "compress") {
+        setCompressDoc(details);
+        setCompressResult(null);
+        setCompressOutput(generateDedicatedOutputPath(outputDir, details.filename, "compressed"));
+        showToast(`Loaded ${details.filename} into Compress`, "info");
+      } else if (tool === "split") {
+        setSplitDoc(details);
+        setSplitStartPage(1);
+        setSplitEndPage(Math.min(details.page_count, 3));
+        setSplitOutput(generateDedicatedOutputPath(outputDir, details.filename, "split"));
+        showToast(`Loaded ${details.filename} into Split`, "info");
+      } else if (tool === "rotate") {
+        setRotateDoc(details);
+        setRotateTargetPage(1);
+        setRotateOutput(generateDedicatedOutputPath(outputDir, details.filename, "rotated"));
+        showToast(`Loaded ${details.filename} into Rotate`, "info");
+      } else if (tool === "inspect") {
+        setInspectDoc(details);
+        setSanitizeOutput(generateDedicatedOutputPath(outputDir, details.filename, "sanitized"));
+        showToast(`Loaded ${details.filename} into Inspect`, "info");
+      } else if (tool === "merge") {
+        setMergeDocs((prev) => [...prev, details]);
+        setMergeOutput(generateDedicatedOutputPath(outputDir, details.filename, "merged"));
+        showToast(`Added ${details.filename} to Merge queue`, "info");
+      }
+    } catch (err) {
+      console.error("Failed to load document for tool navigation:", err);
     }
   };
 
@@ -216,9 +278,17 @@ export default function App() {
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key >= "1" && e.key <= "6") {
+      if ((e.ctrlKey || e.metaKey) && e.key >= "1" && e.key <= "7") {
         e.preventDefault();
-        const toolList: ToolType[] = ["merge", "split", "rotate", "compress", "img2pdf", "inspect"];
+        const toolList: ToolType[] = [
+          "merge",
+          "split",
+          "rotate",
+          "compress",
+          "img2pdf",
+          "inspect",
+          "history",
+        ];
         const idx = parseInt(e.key) - 1;
         if (toolList[idx]) {
           setActiveTool(toolList[idx]);
@@ -260,7 +330,22 @@ export default function App() {
       });
       return;
     }
-    const targetOut = mergeOutput || getDefaultOutputPath(mergeDocs[0].path, "merged");
+    const targetOut =
+      mergeOutput ||
+      generateDedicatedOutputPath(outputDir, mergeDocs[0]?.filename || "Merged", "merged");
+
+    // Strict non-destructive safeguard: never overwrite an original input
+    if (mergeDocs.some((d) => d.path === targetOut)) {
+      setModalState({
+        isOpen: true,
+        title: "Protected Input File",
+        message:
+          "The target output path matches one of your original input files. A separate new file must be created to protect your original documents.",
+        isError: true,
+      });
+      return;
+    }
+
     setIsProcessing(true);
     try {
       let pageCount = 0;
@@ -273,10 +358,29 @@ export default function App() {
         await new Promise((r) => setTimeout(r, 600));
         pageCount = mergeDocs.reduce((acc, d) => acc + (d.page_count || 1), 0);
       }
+
+      const totalSize = mergeDocs.reduce((acc, d) => acc + d.file_size, 0);
+      const outFilename = targetOut.split(/[/\\]/).pop() || "Merged.pdf";
+
+      addHistoryRecord({
+        outputPath: targetOut,
+        filename: outFilename,
+        action: "merge",
+        actionLabel: `Merged ${mergeDocs.length} PDFs`,
+        sourceFiles: mergeDocs.map((d) => d.path),
+        fileSize: totalSize,
+        pageCount,
+      });
+
+      // Prepare fresh timestamped path for the next merge operation
+      setMergeOutput(
+        generateDedicatedOutputPath(outputDir, mergeDocs[0]?.filename || "Merged", "merged")
+      );
+
       setModalState({
         isOpen: true,
         title: "Merge Complete!",
-        message: `Successfully combined ${mergeDocs.length} documents (${pageCount} total pages) into a unified PDF.`,
+        message: `Successfully combined ${mergeDocs.length} documents (${pageCount} total pages) into a new unified PDF.`,
         outputPath: targetOut,
         isError: false,
       });
@@ -299,7 +403,20 @@ export default function App() {
       showToast(customRangeValidation.error || "Invalid page range syntax", "warning");
       return;
     }
-    const targetOut = splitOutput || getDefaultOutputPath(splitDoc.path, "split");
+    const targetOut =
+      splitOutput || generateDedicatedOutputPath(outputDir, splitDoc.filename, "split");
+
+    if (splitDoc.path === targetOut) {
+      setModalState({
+        isOpen: true,
+        title: "Protected Input File",
+        message:
+          "Target output file cannot be the same as your input file. A new file must be created to protect the original.",
+        isError: true,
+      });
+      return;
+    }
+
     const rangeString =
       splitMode === "range" ? `${splitStartPage}-${splitEndPage}` : splitCustomRange;
 
@@ -314,14 +431,30 @@ export default function App() {
         });
       } else {
         await new Promise((r) => setTimeout(r, 600));
-        pageCount = splitMode === "range"
-          ? Math.max(1, splitEndPage - splitStartPage + 1)
-          : (customRangeValidation.pages.length || 1);
+        pageCount =
+          splitMode === "range"
+            ? Math.max(1, splitEndPage - splitStartPage + 1)
+            : customRangeValidation.pages.length || 1;
       }
+
+      const outFilename = targetOut.split(/[/\\]/).pop() || "Split.pdf";
+
+      addHistoryRecord({
+        outputPath: targetOut,
+        filename: outFilename,
+        action: "split",
+        actionLabel: `Split (${rangeString})`,
+        sourceFiles: [splitDoc.path],
+        fileSize: splitDoc.file_size,
+        pageCount,
+      });
+
+      setSplitOutput(generateDedicatedOutputPath(outputDir, splitDoc.filename, "split"));
+
       setModalState({
         isOpen: true,
         title: "Split Complete!",
-        message: `Extracted ${pageCount} pages (${rangeString}) into your new PDF document.`,
+        message: `Extracted ${pageCount} pages (${rangeString}) into a newly created PDF document.`,
         outputPath: targetOut,
         isError: false,
       });
@@ -340,7 +473,20 @@ export default function App() {
   // Execute Rotate
   const executeRotate = async () => {
     if (!rotateDoc) return;
-    const targetOut = rotateOutput || getDefaultOutputPath(rotateDoc.path, "rotated");
+    const targetOut =
+      rotateOutput || generateDedicatedOutputPath(outputDir, rotateDoc.filename, "rotated");
+
+    if (rotateDoc.path === targetOut) {
+      setModalState({
+        isOpen: true,
+        title: "Protected Input File",
+        message:
+          "Target output file cannot be the same as your input file. A new file must be created to protect the original.",
+        isError: true,
+      });
+      return;
+    }
+
     setIsProcessing(true);
     try {
       if (isTauriEnvironment()) {
@@ -361,10 +507,27 @@ export default function App() {
       } else {
         await new Promise((r) => setTimeout(r, 500));
       }
+
+      const outFilename = targetOut.split(/[/\\]/).pop() || "Rotated.pdf";
+
+      addHistoryRecord({
+        outputPath: targetOut,
+        filename: outFilename,
+        action: "rotate",
+        actionLabel: `Rotated ${rotateAll ? "all pages" : `p.${rotateTargetPage}`} by ${rotateDelta}°`,
+        sourceFiles: [rotateDoc.path],
+        fileSize: rotateDoc.file_size,
+        pageCount: rotateDoc.page_count,
+      });
+
+      setRotateOutput(generateDedicatedOutputPath(outputDir, rotateDoc.filename, "rotated"));
+
       setModalState({
         isOpen: true,
         title: "Rotation Complete!",
-        message: `Rotated ${rotateAll ? "all pages" : `page ${rotateTargetPage}`} by ${rotateDelta}° clockwise.`,
+        message: `Rotated ${
+          rotateAll ? "all pages" : `page ${rotateTargetPage}`
+        } by ${rotateDelta}° clockwise and saved as a new file.`,
         outputPath: targetOut,
         isError: false,
       });
@@ -383,7 +546,20 @@ export default function App() {
   // Execute Compress
   const executeCompress = async () => {
     if (!compressDoc) return;
-    const targetOut = compressOutput || getDefaultOutputPath(compressDoc.path, "compressed");
+    const targetOut =
+      compressOutput || generateDedicatedOutputPath(outputDir, compressDoc.filename, "compressed");
+
+    if (compressDoc.path === targetOut) {
+      setModalState({
+        isOpen: true,
+        title: "Protected Input File",
+        message:
+          "Target output file cannot be the same as your input file. A separate new file must be created.",
+        isError: true,
+      });
+      return;
+    }
+
     setIsProcessing(true);
     try {
       let result: CompressDetails;
@@ -395,7 +571,8 @@ export default function App() {
         });
       } else {
         await new Promise((r) => setTimeout(r, 700));
-        const factor = compressPreset === "extreme" ? 0.32 : compressPreset === "recommended" ? 0.52 : 0.78;
+        const factor =
+          compressPreset === "extreme" ? 0.32 : compressPreset === "recommended" ? 0.52 : 0.78;
         const compSize = Math.round(compressDoc.file_size * factor);
         result = {
           original_size: compressDoc.file_size,
@@ -404,10 +581,29 @@ export default function App() {
         };
       }
       setCompressResult(result);
+
+      const outFilename = targetOut.split(/[/\\]/).pop() || "Compressed.pdf";
+
+      addHistoryRecord({
+        outputPath: targetOut,
+        filename: outFilename,
+        action: "compress",
+        actionLabel: `Compressed (${result.ratio_percent.toFixed(1)}% saved)`,
+        sourceFiles: [compressDoc.path],
+        fileSize: result.compressed_size,
+        pageCount: compressDoc.page_count,
+      });
+
+      setCompressOutput(
+        generateDedicatedOutputPath(outputDir, compressDoc.filename, "compressed")
+      );
+
       setModalState({
         isOpen: true,
         title: "Compression Successful!",
-        message: `Reduced file size by ${result.ratio_percent.toFixed(1)}% (${formatBytes(result.original_size)} → ${formatBytes(result.compressed_size)}).`,
+        message: `Reduced file size by ${result.ratio_percent.toFixed(1)}% (${formatBytes(
+          result.original_size
+        )} → ${formatBytes(result.compressed_size)}) and saved to a new PDF.`,
         outputPath: targetOut,
         isError: false,
       });
@@ -426,7 +622,8 @@ export default function App() {
   // Execute Images to PDF
   const executeImg2Pdf = async () => {
     if (imagePaths.length === 0) return;
-    const targetOut = imgOutput || getDefaultOutputPath(imagePaths[0], "converted");
+    const targetOut =
+      imgOutput || generateDedicatedOutputPath(outputDir, "Converted_Images", "converted");
     setIsProcessing(true);
     try {
       let pageCount = 0;
@@ -439,6 +636,21 @@ export default function App() {
         await new Promise((r) => setTimeout(r, 600));
         pageCount = imagePaths.length;
       }
+
+      const outFilename = targetOut.split(/[/\\]/).pop() || "Converted.pdf";
+
+      addHistoryRecord({
+        outputPath: targetOut,
+        filename: outFilename,
+        action: "img2pdf",
+        actionLabel: `From ${imagePaths.length} images`,
+        sourceFiles: imagePaths,
+        fileSize: 0,
+        pageCount,
+      });
+
+      setImgOutput(generateDedicatedOutputPath(outputDir, "Converted_Images", "converted"));
+
       setModalState({
         isOpen: true,
         title: "Images Converted!",
@@ -461,7 +673,20 @@ export default function App() {
   // Execute Sanitize Metadata
   const executeSanitize = async () => {
     if (!inspectDoc) return;
-    const targetOut = sanitizeOutput || getDefaultOutputPath(inspectDoc.path, "sanitized");
+    const targetOut =
+      sanitizeOutput || generateDedicatedOutputPath(outputDir, inspectDoc.filename, "sanitized");
+
+    if (inspectDoc.path === targetOut) {
+      setModalState({
+        isOpen: true,
+        title: "Protected Input File",
+        message:
+          "Target output file cannot be the same as your input file. A new file must be created to protect the original.",
+        isError: true,
+      });
+      return;
+    }
+
     setIsProcessing(true);
     try {
       if (isTauriEnvironment()) {
@@ -472,6 +697,23 @@ export default function App() {
       } else {
         await new Promise((r) => setTimeout(r, 500));
       }
+
+      const outFilename = targetOut.split(/[/\\]/).pop() || "Sanitized.pdf";
+
+      addHistoryRecord({
+        outputPath: targetOut,
+        filename: outFilename,
+        action: "sanitize",
+        actionLabel: "Sanitized metadata",
+        sourceFiles: [inspectDoc.path],
+        fileSize: inspectDoc.file_size,
+        pageCount: inspectDoc.page_count,
+      });
+
+      setSanitizeOutput(
+        generateDedicatedOutputPath(outputDir, inspectDoc.filename, "sanitized")
+      );
+
       setModalState({
         isOpen: true,
         title: "Metadata Cleared",
@@ -558,6 +800,17 @@ export default function App() {
         </svg>
       ),
     },
+    {
+      id: "history",
+      label: "Work History",
+      badge: historyCount > 0 ? String(historyCount) : undefined,
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+      ),
+    },
   ];
 
   return (
@@ -629,6 +882,8 @@ export default function App() {
                 "Convert images into a unified PDF document."}
               {activeTool === "inspect" &&
                 "View document properties or clear author and software metadata."}
+              {activeTool === "history" &&
+                "Review, search, open, and manage all documents generated by PaperFlow in your dedicated storage folder."}
             </p>
           </div>
         </header>
@@ -1288,6 +1543,19 @@ export default function App() {
               )}
             </div>
           )}
+
+          {/* ================= WORK HISTORY TAB ================= */}
+          {activeTool === "history" && (
+            <HistoryTab
+              outputDir={outputDir}
+              onOutputDirChange={(newDir) => {
+                setOutputDir(newDir);
+                setPreferredOutputDir(newDir);
+              }}
+              onNavigateToTool={handleNavigateToTool}
+              onShowToast={showToast}
+            />
+          )}
         </section>
       </main>
 
@@ -1299,6 +1567,7 @@ export default function App() {
           outputPath={modalState.outputPath}
           isError={modalState.isError}
           onClose={() => setModalState({ isOpen: false, title: "", message: "" })}
+          onViewHistory={() => setActiveTool("history")}
         />
       )}
 

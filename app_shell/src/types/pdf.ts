@@ -34,4 +34,20 @@ export type ToolType =
   | "rotate" 
   | "compress" 
   | "img2pdf" 
-  | "inspect";
+  | "inspect"
+  | "history";
+
+export type ProcessedActionType = "merge" | "split" | "rotate" | "compress" | "img2pdf" | "sanitize";
+
+export interface ProcessedFileRecord {
+  id: string;
+  outputPath: string;
+  filename: string;
+  action: ProcessedActionType;
+  actionLabel: string;
+  sourceFiles: string[];
+  timestamp: number;
+  fileSize: number;
+  pageCount?: number;
+}
+

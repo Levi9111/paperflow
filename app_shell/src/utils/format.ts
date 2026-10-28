@@ -17,6 +17,55 @@ export function getDefaultOutputPath(inputPath: string, suffix: string, ext = "p
   return `${dir}${baseName}_${suffix}.${ext}`;
 }
 
+export function generateDedicatedOutputPath(
+  outputDir: string,
+  baseNameOrInputPath: string,
+  actionSuffix: string,
+  ext = "pdf"
+): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const timeStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(
+    now.getHours()
+  )}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+  let baseName = "Document";
+  if (baseNameOrInputPath) {
+    const lastSlash = Math.max(baseNameOrInputPath.lastIndexOf("/"), baseNameOrInputPath.lastIndexOf("\\"));
+    const rawName = lastSlash >= 0 ? baseNameOrInputPath.substring(lastSlash + 1) : baseNameOrInputPath;
+    const lastDot = rawName.lastIndexOf(".");
+    baseName = lastDot > 0 ? rawName.substring(0, lastDot) : rawName;
+    baseName = baseName.replace(/[^a-zA-Z0-9_\-\u00C0-\u024F]/g, "_").substring(0, 40);
+  }
+
+  const filename = `${baseName}_${actionSuffix}_${timeStr}.${ext}`;
+  const cleanDir = outputDir ? outputDir.replace(/[/\\]+$/, "") : "";
+  const sep = cleanDir.includes("\\") && !cleanDir.includes("/") ? "\\" : "/";
+
+  return cleanDir ? `${cleanDir}${sep}${filename}` : filename;
+}
+
+export function formatDate(timestamp: number): string {
+  if (!timestamp) return "Unknown";
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffSec < 60) return "Just now";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400 && date.getDate() === now.getDate()) {
+    return `Today at ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  }
+  return date.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+
 export interface RangeValidationResult {
   valid: boolean;
   pages: number[];

@@ -8,6 +8,7 @@ interface ResultModalProps {
   outputPath?: string;
   isError?: boolean;
   onClose: () => void;
+  onViewHistory?: () => void;
 }
 
 export const ResultModal: React.FC<ResultModalProps> = ({
@@ -16,6 +17,7 @@ export const ResultModal: React.FC<ResultModalProps> = ({
   outputPath,
   isError = false,
   onClose,
+  onViewHistory,
 }) => {
   const handleOpenPdf = async () => {
     if (outputPath) {
@@ -92,6 +94,22 @@ export const ResultModal: React.FC<ResultModalProps> = ({
                 </svg>
                 Show in Folder
               </button>
+              {onViewHistory && (
+                <button
+                  type="button"
+                  className="btn-modal-secondary"
+                  onClick={() => {
+                    onClose();
+                    onViewHistory();
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  View in History
+                </button>
+              )}
             </>
           )}
           <button type="button" className="btn-modal-close" onClick={onClose}>
