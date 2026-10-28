@@ -30,6 +30,10 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [isConfirmingClear, setIsConfirmingClear] = useState(false);
+  const [isEditingFolder, setIsEditingFolder] = useState(false);
+  const [customFolderInput, setCustomFolderInput] = useState(outputDir);
 
   const loadRecords = () => {
     setRecords(getHistoryRecords());
@@ -48,7 +52,6 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
     try {
       const synced = await syncWithDisk(outputDir);
       setRecords(synced);
-      onShowToast("Synced work folder with disk", "info");
     } catch (e) {
       console.error(e);
     } finally {
@@ -62,10 +65,8 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
       try {
         await invoke("open_folder", { path: outputDir });
       } catch (err) {
-        onShowToast(`Failed to open folder: ${err}`, "warning");
+        console.warn("Failed to open folder:", err);
       }
-    } else {
-      onShowToast(`Work directory: ${outputDir}`, "info");
     }
   };
 
@@ -80,7 +81,6 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
         if (selected && typeof selected === "string") {
           onOutputDirChange(selected);
           setPreferredOutputDir(selected);
-          onShowToast(`Output folder set to: ${selected}`, "success");
           return;
         }
       } catch (err) {
@@ -88,12 +88,16 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
       }
     }
 
-    const manual = window.prompt("Enter new folder path to store all outputs:", outputDir);
-    if (manual && manual.trim()) {
-      onOutputDirChange(manual.trim());
-      setPreferredOutputDir(manual.trim());
-      onShowToast(`Output folder set to: ${manual.trim()}`, "success");
+    setCustomFolderInput(outputDir);
+    setIsEditingFolder(true);
+  };
+
+  const saveCustomFolder = () => {
+    if (customFolderInput && customFolderInput.trim()) {
+      onOutputDirChange(customFolderInput.trim());
+      setPreferredOutputDir(customFolderInput.trim());
     }
+    setIsEditingFolder(false);
   };
 
   const handleOpenFile = async (record: ProcessedFileRecord) => {
@@ -101,7 +105,7 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
       try {
         await invoke("open_file", { path: record.outputPath });
       } catch (err) {
-        onShowToast(`Could not open file: ${err}`, "warning");
+        console.warn("Could not open file:", err);
       }
     } else {
       window.open(record.outputPath, "_blank");
@@ -113,10 +117,8 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
       try {
         await invoke("open_folder", { path: record.outputPath });
       } catch (err) {
-        onShowToast(`Could not open folder: ${err}`, "warning");
+        console.warn("Could not open folder:", err);
       }
-    } else {
-      onShowToast(`Location: ${record.outputPath}`, "info");
     }
   };
 
@@ -125,18 +127,13 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
       await navigator.clipboard.writeText(record.outputPath);
       setCopiedId(record.id);
       setTimeout(() => setCopiedId(null), 2000);
-      onShowToast("File path copied to clipboard", "success");
+      onShowToast("Path copied to clipboard", "success");
     } catch {
       onShowToast("Failed to copy path", "warning");
     }
   };
 
-  const handleDeleteRecord = async (record: ProcessedFileRecord) => {
-    const shouldDeleteFromDisk = window.confirm(
-      `Delete "${record.filename}"?\n\nClick OK to also remove the file from your computer disk.`
-    );
-    if (!shouldDeleteFromDisk) return;
-
+  const executeDelete = async (record: ProcessedFileRecord) => {
     if (isTauriEnvironment()) {
       try {
         await invoke("delete_file", { path: record.outputPath });
@@ -145,15 +142,12 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
       }
     }
     removeHistoryRecord(record.id);
-    onShowToast(`Removed ${record.filename}`, "info");
+    setConfirmDeleteId(null);
   };
 
-  const handleClearAll = () => {
-    if (records.length === 0) return;
-    if (window.confirm("Clear all work history entries? (Files on disk will NOT be deleted)")) {
-      clearHistory();
-      onShowToast("History log cleared", "info");
-    }
+  const executeClear = () => {
+    clearHistory();
+    setIsConfirmingClear(false);
   };
 
   const filteredRecords = records.filter((r) => {
@@ -211,9 +205,31 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                 Originals Always Protected
               </span>
             </div>
-            <div className="folder-path-display" title={outputDir}>
-              {outputDir || "Resolving dedicated folder..."}
-            </div>
+            {isEditingFolder ? (
+              <div className="inline-folder-edit-box">
+                <input
+                  type="text"
+                  value={customFolderInput}
+                  onChange={(e) => setCustomFolderInput(e.target.value)}
+                  className="inline-folder-input"
+                  placeholder="Enter directory path..."
+                  autoFocus
+                />
+                <button className="btn-fluent btn-fluent-primary" onClick={saveCustomFolder}>
+                  Save
+                </button>
+                <button
+                  className="btn-fluent btn-fluent-secondary"
+                  onClick={() => setIsEditingFolder(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="folder-path-display" title={outputDir}>
+                {outputDir || "Resolving dedicated folder..."}
+              </div>
+            )}
             <p className="folder-card-desc">
               Every operation produces a newly created PDF file here. Original source files are never overwritten.
             </p>
@@ -255,11 +271,29 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
             </svg>
             {isScanning ? "Scanning..." : "Rescan"}
           </button>
-          {records.length > 0 && (
-            <button className="btn-fluent btn-fluent-ghost text-danger" onClick={handleClearAll} title="Clear history">
-              Clear List
-            </button>
-          )}
+          {records.length > 0 &&
+            (isConfirmingClear ? (
+              <div className="inline-header-confirm">
+                <span>Clear history?</span>
+                <button className="btn-confirm-delete" onClick={executeClear}>
+                  Yes, Clear
+                </button>
+                <button
+                  className="btn-confirm-cancel"
+                  onClick={() => setIsConfirmingClear(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                className="btn-fluent btn-fluent-ghost text-danger"
+                onClick={() => setIsConfirmingClear(true)}
+                title="Clear history"
+              >
+                Clear List
+              </button>
+            ))}
         </div>
       </div>
 
@@ -463,16 +497,28 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
                       Rotate
                     </button>
                   </div>
-                  <button
-                    className="btn-card-delete"
-                    onClick={() => handleDeleteRecord(item)}
-                    title="Delete output file"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    </svg>
-                  </button>
+                  {confirmDeleteId === item.id ? (
+                    <div className="inline-card-confirm">
+                      <span>Delete?</span>
+                      <button className="btn-confirm-delete" onClick={() => executeDelete(item)}>
+                        Delete
+                      </button>
+                      <button className="btn-confirm-cancel" onClick={() => setConfirmDeleteId(null)}>
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="btn-card-delete"
+                      onClick={() => setConfirmDeleteId(item.id)}
+                      title="Delete output file"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
