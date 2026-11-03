@@ -866,6 +866,24 @@ export default function App() {
       <main className="workspace">
         {/* Top Header */}
         <header className="workspace-header">
+          <div className="mobile-app-bar">
+            <div className="mobile-brand">
+              <img src="/logo.jpg" alt="PaperFlow Logo" className="mobile-brand-logo" />
+              <span className="mobile-brand-name">PaperFlow</span>
+            </div>
+            <button
+              type="button"
+              className="btn-mobile-history"
+              onClick={() => setActiveTool("history")}
+              title="Work History"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              {historyCount > 0 && <span className="mobile-history-badge">{historyCount}</span>}
+            </button>
+          </div>
           <div className="header-titles" key={activeTool}>
             <h2 className="tool-title">
               {tools.find((t) => t.id === activeTool)?.label}
