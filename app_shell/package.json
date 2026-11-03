@@ -8,7 +8,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "build:rpm": "tauri build --bundles rpm"
+    "build:rpm": "tauri build --bundles rpm",
+    "build:android": "tauri android build --apk",
+    "build:android:debug": "tauri android build --debug --apk"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

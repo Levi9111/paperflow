@@ -70,13 +70,32 @@ To install it on your Fedora machine:
 sudo dnf install ./app_shell/src-tauri/target/release/bundle/rpm/PaperFlow-0.1.0-1.x86_64.rpm
 ```
 
-### 4. Standalone Binary Output
+### 4. Build Android APK
+PaperFlow features a full Android target with all PDF operations running on-device via the pure Rust engine:
+```bash
+cd app_shell
+pnpm build:android
+```
+Or for debug builds:
+```bash
+pnpm build:android:debug
+```
+The optimized and signed APK is generated at:
+```bash
+PaperFlow-0.2.0-arm64.apk
+```
+To install it directly to a connected Android phone or emulator:
+```bash
+adb install -r PaperFlow-0.2.0-arm64.apk
+```
+
+### 5. Standalone Binary Output
 The compiled release executable is located at:
 ```bash
 app_shell/src-tauri/target/release/app_shell
 ```
 
-### 4. Headless CLI Usage
+### 6. Headless CLI Usage
 You can also build and use the standalone CLI tool:
 ```bash
 cargo build --release -p paperflow-cli
