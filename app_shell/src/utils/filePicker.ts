@@ -1,4 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import { registerBrowserFile } from "./docCache";
 import { isTauriEnvironment } from "./platform";
 
@@ -24,11 +25,11 @@ export async function pickFiles(options: FilePickerOptions = {}): Promise<string
       }
       return [];
     } catch (err) {
-      console.warn("Tauri dialog failed, falling back to browser input:", err);
+      console.warn("Tauri dialog failed, falling back to file input:", err);
     }
   }
 
-  // Universal Browser fallback: triggers standard browser file dialog
+  // File picker fallback (works reliably in WebView and browsers)
   return new Promise<string[]>((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
@@ -39,15 +40,32 @@ export async function pickFiles(options: FilePickerOptions = {}): Promise<string
 
     let resolved = false;
 
-    input.onchange = () => {
+    input.onchange = async () => {
       resolved = true;
       const files = Array.from(input.files || []);
-      const paths = files.map((f) => registerBrowserFile(f));
+      const paths: string[] = [];
+
+      for (const file of files) {
+        if (isTauri) {
+          try {
+            const buffer = await file.arrayBuffer();
+            const localPath = await invoke<string>("cache_uploaded_file", {
+              filename: file.name,
+              data: Array.from(new Uint8Array(buffer)),
+            });
+            paths.push(localPath);
+            continue;
+          } catch (e) {
+            console.error("Failed to cache file via Tauri:", e);
+          }
+        }
+        paths.push(registerBrowserFile(file));
+      }
+
       resolve(paths);
       input.remove();
     };
 
-    // Handle cancel detection
     window.addEventListener(
       "focus",
       () => {
@@ -56,7 +74,7 @@ export async function pickFiles(options: FilePickerOptions = {}): Promise<string
             resolve([]);
             input.remove();
           }
-        }, 500);
+        }, 800);
       },
       { once: true }
     );
