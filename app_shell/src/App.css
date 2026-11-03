@@ -3634,3 +3634,234 @@ body {
 }
 
 
+
+/* ==========================================================================
+   Mobile & Touch Responsive Adaptations (Android / Touchscreens)
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .app-shell {
+    flex-direction: column-reverse;
+    height: 100vh;
+    height: 100dvh;
+    width: 100vw;
+    overflow: hidden;
+  }
+
+  .sidebar {
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    height: 60px;
+    max-height: 60px;
+    padding: 2px 4px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+    border-right: none;
+    border-top: 1px solid var(--border-subtle);
+    z-index: 100;
+    flex-shrink: 0;
+    background: rgba(23, 27, 36, 0.96);
+    backdrop-filter: blur(20px);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .sidebar-brand,
+  .nav-group-label,
+  .sidebar-footer,
+  .nav-chip {
+    display: none !important;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    width: 100%;
+    gap: 2px;
+  }
+
+  .nav-item {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 4px;
+    font-size: 9.5px;
+    gap: 2px;
+    min-width: 44px;
+    border-radius: var(--radius-sm);
+    border: none;
+    flex: 1;
+  }
+
+  .nav-item .nav-label {
+    font-size: 9px;
+    font-weight: 500;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 50px;
+  }
+
+  .nav-item::before {
+    display: none !important;
+  }
+
+  .nav-item.active {
+    color: var(--coral-light);
+    background: rgba(255, 71, 87, 0.12);
+  }
+
+  .workspace {
+    flex: 1;
+    height: calc(100vh - 60px);
+    height: calc(100dvh - 60px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    width: 100%;
+  }
+
+  .workspace-header {
+    padding: 12px 14px 10px 14px;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .tool-title {
+    font-size: 18px;
+    margin-bottom: 2px;
+  }
+
+  .tool-description {
+    font-size: 11.5px;
+    line-height: 1.35;
+  }
+
+  .tool-canvas {
+    padding: 14px 12px 24px 12px;
+  }
+
+  .dropzone {
+    padding: 24px 14px;
+    border-width: 2px;
+  }
+
+  .dropzone-title {
+    font-size: 15px;
+  }
+
+  .dropzone-desc {
+    font-size: 11.5px;
+  }
+
+  .btn-primary,
+  .btn-action {
+    min-height: 44px;
+    font-size: 13.5px;
+  }
+
+  .destination-selector-container {
+    padding: 10px 12px;
+  }
+
+  .action-feedback-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .feedback-actions-right {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .history-header-bar {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .pdf-viewer-overlay {
+    padding: 0;
+    inset: 0;
+  }
+
+  .pdf-viewer-modal {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    border-radius: 0;
+    border: none;
+  }
+}
+
+/* Mobile App Bar */
+.mobile-app-bar {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-app-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding-bottom: 8px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .mobile-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mobile-brand-logo {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-xs);
+    object-fit: cover;
+  }
+
+  .mobile-brand-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .btn-mobile-history {
+    position: relative;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .mobile-history-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--coral);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+  }
+}
