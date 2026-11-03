@@ -93,20 +93,37 @@ fn get_doc_details(path: String) -> Result<DocDetails, String> {
 #[tauri::command]
 fn pdf_info(path: String) -> Result<usize, String> {
     let local = resolve_single_path(&path);
-    PaperFlowEngine::get_page_count(&local)
-        .map_err(|e| e.to_string())
+    PaperFlowEngine::get_page_count(&local).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn get_default_output_dir() -> Result<String, String> {
-    let base_dir = std::env::var("HOME")
-        .map(|h| PathBuf::from(h).join("Documents").join("PaperFlow"))
-        .unwrap_or_else(|_| std::env::temp_dir().join("PaperFlow"));
+fn get_default_output_dir(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri::Manager;
+    #[cfg(target_os = "android")]
+    {
+        let base_dir = app
+            .path()
+            .document_dir()
+            .or_else(|_| app.path().app_data_dir())
+            .unwrap_or_else(|_| std::env::temp_dir())
+            .join("PaperFlow");
 
-    if !base_dir.exists() {
-        let _ = std::fs::create_dir_all(&base_dir);
+        if !base_dir.exists() {
+            let _ = std::fs::create_dir_all(&base_dir);
+        }
+        Ok(base_dir.to_string_lossy().to_string())
     }
-    Ok(base_dir.to_string_lossy().to_string())
+    #[cfg(not(target_os = "android"))]
+    {
+        let base_dir = std::env::var("HOME")
+            .map(|h| PathBuf::from(h).join("Documents").join("PaperFlow"))
+            .unwrap_or_else(|_| std::env::temp_dir().join("PaperFlow"));
+
+        if !base_dir.exists() {
+            let _ = std::fs::create_dir_all(&base_dir);
+        }
+        Ok(base_dir.to_string_lossy().to_string())
+    }
 }
 
 #[tauri::command]
@@ -177,86 +194,66 @@ fn share_file(_app: tauri::AppHandle, path: String) -> Result<(), String> {
     }
     #[cfg(not(target_os = "android"))]
     {
-        open_folder(path)
+        open_folder(app, path)
     }
 }
 
 #[tauri::command]
-fn open_folder(path: String) -> Result<(), String> {
-    let p = Path::new(&path);
-    let target_dir = if p.is_dir() { p } else { p.parent().unwrap_or(p) };
-
-    #[cfg(target_os = "linux")]
+fn open_folder(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    #[cfg(target_os = "android")]
     {
-        std::process::Command::new("xdg-open")
-            .arg(target_dir)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        share_file(app, path)
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(not(target_os = "android"))]
     {
-        std::process::Command::new("explorer")
-            .arg(target_dir)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        use tauri_plugin_opener::OpenerExt;
+        let local = resolve_single_path(&path);
+        let target_dir = if local.is_dir() {
+            local
+        } else {
+            local.parent().unwrap_or(&local).to_path_buf()
+        };
+        let _ = app.opener().reveal_item_in_dir(target_dir);
+        Ok(())
     }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(target_dir)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    Ok(())
 }
 
 #[tauri::command]
-fn open_file(path: String) -> Result<(), String> {
-    let p = Path::new(&path);
-    if !p.exists() {
+fn open_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let local = resolve_single_path(&path);
+    if !local.exists() {
         return Err("File does not exist on disk".into());
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(target_os = "android")]
     {
-        std::process::Command::new("xdg-open")
-            .arg(p)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        share_file(app, path)
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(not(target_os = "android"))]
     {
-        std::process::Command::new("cmd")
-            .args(["/c", "start", "", &path])
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        use tauri_plugin_opener::OpenerExt;
+        app.opener()
+            .open_path(local.to_string_lossy().as_ref(), None::<&str>)
+            .map_err(|e| e.to_string())
     }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(p)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    Ok(())
 }
 
 #[tauri::command]
 fn delete_file(path: String) -> Result<(), String> {
-    let p = Path::new(&path);
-    if p.exists() {
-        std::fs::remove_file(p).map_err(|e| e.to_string())?;
+    let local = resolve_single_path(&path);
+    if local.exists() {
+        std::fs::remove_file(local).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
 
 #[tauri::command]
 fn read_file_binary(path: String) -> Result<Vec<u8>, String> {
-    let p = Path::new(&path);
-    if !p.exists() {
+    let local = resolve_single_path(&path);
+    if !local.exists() {
         return Err(format!("File does not exist: {}", path));
     }
-    std::fs::read(p).map_err(|e| format!("Failed to read file: {}", e))
+    std::fs::read(local).map_err(|e| format!("Failed to read file: {}", e))
 }
 
 #[tauri::command]
@@ -280,7 +277,12 @@ fn list_output_files(dir: String) -> Result<Vec<DocDetails>, String> {
     if let Ok(entries) = std::fs::read_dir(p) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_file() && path.extension().and_then(|e| e.to_str()).map_or(false, |ext| ext.eq_ignore_ascii_case("pdf")) {
+            if path.is_file()
+                && path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map_or(false, |ext| ext.eq_ignore_ascii_case("pdf"))
+            {
                 if let Ok(details) = get_doc_details(path.to_string_lossy().to_string()) {
                     files.push(details);
                 }
@@ -296,8 +298,9 @@ fn list_output_files(dir: String) -> Result<Vec<DocDetails>, String> {
 }
 
 #[tauri::command]
-fn pdf_merge(inputs: Vec<String>, output: String) -> Result<usize, String> {
-    let input_paths: Vec<PathBuf> = inputs.into_iter().map(PathBuf::from).collect();
+fn pdf_merge(app: tauri::AppHandle, inputs: Vec<String>, output: String) -> Result<usize, String> {
+    use tauri::Manager;
+    let input_paths: Vec<PathBuf> = inputs.iter().map(|s| resolve_single_path(s)).collect();
     let out_path = PathBuf::from(&output);
 
     // Strict non-destructive safeguard: never overwrite an input document
@@ -311,15 +314,16 @@ fn pdf_merge(inputs: Vec<String>, output: String) -> Result<usize, String> {
         }
     }
 
-    let ctx = JobContext::new_noop(std::env::temp_dir());
+    let temp_dir = app.path().app_cache_dir().unwrap_or_else(|_| std::env::temp_dir());
+    let ctx = JobContext::new_noop(temp_dir);
 
-    PaperFlowEngine::merge(&input_paths, &out_path, &ctx)
-        .map_err(|e| e.to_string())
+    PaperFlowEngine::merge(&input_paths, &out_path, &ctx).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn pdf_split(input: String, ranges: String, output: String) -> Result<usize, String> {
-    let in_path = PathBuf::from(&input);
+fn pdf_split(app: tauri::AppHandle, input: String, ranges: String, output: String) -> Result<usize, String> {
+    use tauri::Manager;
+    let in_path = resolve_single_path(&input);
     let out_path = PathBuf::from(&output);
 
     if in_path == out_path {
@@ -332,21 +336,18 @@ fn pdf_split(input: String, ranges: String, output: String) -> Result<usize, Str
         }
     }
 
-    let ctx = JobContext::new_noop(std::env::temp_dir());
+    let temp_dir = app.path().app_cache_dir().unwrap_or_else(|_| std::env::temp_dir());
+    let ctx = JobContext::new_noop(temp_dir);
 
-    let total = PaperFlowEngine::get_page_count(&in_path)
-        .map_err(|e| e.to_string())?;
+    let total = PaperFlowEngine::get_page_count(&in_path).map_err(|e| e.to_string())?;
+    let pages = PaperFlowEngine::parse_page_ranges(&ranges, total).map_err(|e| e.to_string())?;
 
-    let pages = PaperFlowEngine::parse_page_ranges(&ranges, total)
-        .map_err(|e| e.to_string())?;
-
-    PaperFlowEngine::split_range(&in_path, &pages, &out_path, &ctx)
-        .map_err(|e| e.to_string())
+    PaperFlowEngine::split_range(&in_path, &pages, &out_path, &ctx).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn pdf_rotate(input: String, page: Option<u32>, delta: i64, output: String) -> Result<(), String> {
-    let in_path = PathBuf::from(&input);
+    let in_path = resolve_single_path(&input);
     let out_path = PathBuf::from(&output);
 
     if in_path == out_path {
@@ -360,11 +361,9 @@ fn pdf_rotate(input: String, page: Option<u32>, delta: i64, output: String) -> R
     }
 
     if let Some(p) = page {
-        PaperFlowEngine::rotate_page(&in_path, p, delta, &out_path)
-            .map_err(|e| e.to_string())
+        PaperFlowEngine::rotate_page(&in_path, p, delta, &out_path).map_err(|e| e.to_string())
     } else {
-        PaperFlowEngine::rotate_all_pages(&in_path, delta, &out_path)
-            .map_err(|e| e.to_string())
+        PaperFlowEngine::rotate_all_pages(&in_path, delta, &out_path).map_err(|e| e.to_string())
     }
 }
 
@@ -379,8 +378,9 @@ fn pdf_rotate_page(input: String, page: u32, angle: i64, output: String) -> Resu
 }
 
 #[tauri::command]
-fn pdf_compress(input: String, preset: String, output: String) -> Result<CompressDetails, String> {
-    let in_path = PathBuf::from(&input);
+fn pdf_compress(app: tauri::AppHandle, input: String, preset: String, output: String) -> Result<CompressDetails, String> {
+    use tauri::Manager;
+    let in_path = resolve_single_path(&input);
     let out_path = PathBuf::from(&output);
 
     if in_path == out_path {
@@ -393,7 +393,8 @@ fn pdf_compress(input: String, preset: String, output: String) -> Result<Compres
         }
     }
 
-    let ctx = JobContext::new_noop(std::env::temp_dir());
+    let temp_dir = app.path().app_cache_dir().unwrap_or_else(|_| std::env::temp_dir());
+    let ctx = JobContext::new_noop(temp_dir);
 
     let p = match preset.to_lowercase().as_str() {
         "extreme" => CompressionPreset::Extreme,
@@ -401,8 +402,8 @@ fn pdf_compress(input: String, preset: String, output: String) -> Result<Compres
         _ => CompressionPreset::Recommended,
     };
 
-    let (original_size, compressed_size) = Compressor::compress_file(&in_path, &out_path, p, &ctx)
-        .map_err(|e| e.to_string())?;
+    let (original_size, compressed_size) =
+        Compressor::compress_file(&in_path, &out_path, p, &ctx).map_err(|e| e.to_string())?;
 
     let ratio_percent = if original_size > 0 {
         ((original_size.saturating_sub(compressed_size)) as f64 / original_size as f64) * 100.0
@@ -419,7 +420,7 @@ fn pdf_compress(input: String, preset: String, output: String) -> Result<Compres
 
 #[tauri::command]
 fn pdf_img2pdf(inputs: Vec<String>, output: String) -> Result<usize, String> {
-    let input_paths: Vec<PathBuf> = inputs.into_iter().map(PathBuf::from).collect();
+    let input_paths: Vec<PathBuf> = inputs.iter().map(|s| resolve_single_path(s)).collect();
     let out_path = PathBuf::from(&output);
 
     if let Some(parent) = out_path.parent() {
@@ -428,13 +429,12 @@ fn pdf_img2pdf(inputs: Vec<String>, output: String) -> Result<usize, String> {
         }
     }
 
-    ImageConverter::image_to_pdf(&input_paths, &out_path)
-        .map_err(|e| e.to_string())
+    ImageConverter::image_to_pdf(&input_paths, &out_path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn pdf_sanitize_meta(input: String, output: String) -> Result<(), String> {
-    let in_path = PathBuf::from(&input);
+    let in_path = resolve_single_path(&input);
     let out_path = PathBuf::from(&output);
 
     if in_path == out_path {
@@ -447,15 +447,13 @@ fn pdf_sanitize_meta(input: String, output: String) -> Result<(), String> {
         }
     }
 
-    DocumentMetadata::sanitize_and_save(&in_path, &out_path)
-        .map_err(|e| e.to_string())
+    DocumentMetadata::sanitize_and_save(&in_path, &out_path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn get_metadata(input: String) -> Result<DocumentMetadata, String> {
-    let in_path = PathBuf::from(&input);
-    DocumentMetadata::read_from_file(&in_path)
-        .map_err(|e| e.to_string())
+    let in_path = resolve_single_path(&input);
+    DocumentMetadata::read_from_file(&in_path).map_err(|e| e.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
