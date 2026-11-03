@@ -147,6 +147,41 @@ fn cache_uploaded_file(app: tauri::AppHandle, filename: String, data: Vec<u8>) -
 }
 
 #[tauri::command]
+fn share_file(_app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let local = resolve_single_path(&path);
+    let path_str = local.to_string_lossy().to_string();
+
+    #[cfg(target_os = "android")]
+    {
+        let vm_ptr = ndk_context::android_context().vm().cast::<jni::sys::JavaVM>();
+        if !vm_ptr.is_null() {
+            unsafe {
+                if let Ok(vm) = jni::JavaVM::from_raw(vm_ptr) {
+                    if let Ok(mut env) = vm.attach_current_thread() {
+                        if let Ok(j_path) = env.new_string(&path_str) {
+                            if let Ok(class) = env.find_class("io/github/paperflow/app/MainActivity") {
+                                let _ = env.call_static_method(
+                                    class,
+                                    "shareFile",
+                                    "(Ljava/lang/String;)Z",
+                                    &[jni::objects::JValue::Object(&j_path)],
+                                );
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Err("Failed to invoke native share sheet".into())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        open_folder(path)
+    }
+}
+
+#[tauri::command]
 fn open_folder(path: String) -> Result<(), String> {
     let p = Path::new(&path);
     let target_dir = if p.is_dir() { p } else { p.parent().unwrap_or(p) };
@@ -434,6 +469,7 @@ pub fn run() {
             get_default_output_dir,
             ensure_output_dir,
             cache_uploaded_file,
+            share_file,
             open_folder,
             open_file,
             delete_file,
