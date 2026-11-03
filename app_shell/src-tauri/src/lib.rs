@@ -119,6 +119,34 @@ fn ensure_output_dir(dir: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn cache_uploaded_file(app: tauri::AppHandle, filename: String, data: Vec<u8>) -> Result<String, String> {
+    use tauri::Manager;
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .unwrap_or_else(|_| std::env::temp_dir())
+        .join("imported");
+
+    if !cache_dir.exists() {
+        let _ = std::fs::create_dir_all(&cache_dir);
+    }
+    let safe_name = if filename.trim().is_empty() {
+        format!(
+            "doc_{}.pdf",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        )
+    } else {
+        filename
+    };
+    let out_path = cache_dir.join(safe_name);
+    std::fs::write(&out_path, data).map_err(|e| format!("Failed to cache file: {}", e))?;
+    Ok(out_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn open_folder(path: String) -> Result<(), String> {
     let p = Path::new(&path);
     let target_dir = if p.is_dir() { p } else { p.parent().unwrap_or(p) };
@@ -405,6 +433,7 @@ pub fn run() {
             pdf_info,
             get_default_output_dir,
             ensure_output_dir,
+            cache_uploaded_file,
             open_folder,
             open_file,
             delete_file,
