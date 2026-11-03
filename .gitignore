@@ -24,3 +24,12 @@ app_shell/src-tauri/target/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Android build artifacts
+.gradle/
+app_shell/src-tauri/gen/android/.gradle/
+app_shell/src-tauri/gen/android/build/
+app_shell/src-tauri/gen/android/app/build/
+app_shell/src-tauri/gen/android/app/src/main/jniLibs/
+*.idsig
+*.apk
