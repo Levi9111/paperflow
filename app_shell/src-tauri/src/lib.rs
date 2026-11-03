@@ -7,6 +7,47 @@ use paperflow_core::{
     JobContext, PaperFlowEngine,
 };
 
+#[cfg(target_os = "android")]
+fn resolve_single_path(path: &str) -> PathBuf {
+    if !path.starts_with("content://") {
+        return PathBuf::from(path);
+    }
+    let vm_ptr = ndk_context::android_context().vm().cast::<jni::sys::JavaVM>();
+    if !vm_ptr.is_null() {
+        unsafe {
+            if let Ok(vm) = jni::JavaVM::from_raw(vm_ptr) {
+                if let Ok(mut env) = vm.attach_current_thread() {
+                    if let Ok(j_path) = env.new_string(path) {
+                        if let Ok(class) = env.find_class("io/github/paperflow/app/MainActivity") {
+                            let res = env.call_static_method(
+                                class,
+                                "resolveContentUri",
+                                "(Ljava/lang/String;)Ljava/lang/String;",
+                                &[jni::objects::JValue::Object(&j_path)],
+                            );
+                            if let Ok(val) = res {
+                                if let Ok(obj) = val.l() {
+                                    if !obj.is_null() {
+                                        if let Ok(res_str) = env.get_string(&obj.into()) {
+                                            return PathBuf::from(res_str.to_string_lossy().to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    PathBuf::from(path)
+}
+
+#[cfg(not(target_os = "android"))]
+fn resolve_single_path(path: &str) -> PathBuf {
+    PathBuf::from(path)
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DocDetails {
     pub path: String,
@@ -27,7 +68,8 @@ pub struct CompressDetails {
 
 #[tauri::command]
 fn get_doc_details(path: String) -> Result<DocDetails, String> {
-    let p = Path::new(&path);
+    let local = resolve_single_path(&path);
+    let p = local.as_path();
     let page_count = PaperFlowEngine::get_page_count(p).map_err(|e| e.to_string())?;
     let file_size = std::fs::metadata(p).map(|m| m.len()).unwrap_or(0);
     let filename = p
@@ -38,7 +80,7 @@ fn get_doc_details(path: String) -> Result<DocDetails, String> {
     let meta = DocumentMetadata::read_from_file(p).ok();
 
     Ok(DocDetails {
-        path: path.clone(),
+        path: local.to_string_lossy().to_string(),
         filename,
         page_count,
         file_size,
@@ -50,7 +92,8 @@ fn get_doc_details(path: String) -> Result<DocDetails, String> {
 
 #[tauri::command]
 fn pdf_info(path: String) -> Result<usize, String> {
-    PaperFlowEngine::get_page_count(Path::new(&path))
+    let local = resolve_single_path(&path);
+    PaperFlowEngine::get_page_count(&local)
         .map_err(|e| e.to_string())
 }
 
