@@ -1,13 +1,13 @@
+use lopdf::{Document, Object};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use lopdf::{Document, Object};
 use thiserror::Error;
 
-pub mod metadata;
 pub mod compress;
 pub mod convert;
+pub mod metadata;
 pub mod watermark;
 
 #[derive(Error, Debug)]
@@ -134,7 +134,10 @@ impl PaperFlowEngine {
             for (obj_id, object) in doc.objects {
                 match object {
                     Object::Dictionary(dict) => {
-                        let is_page = dict.get(b"Type").and_then(|v| v.as_name()).map_or(false, |n| n == b"Page");
+                        let is_page = dict
+                            .get(b"Type")
+                            .and_then(|v| v.as_name())
+                            .is_ok_and(|n| n == b"Page");
                         if is_page {
                             pages_obj.insert(obj_id, Object::Dictionary(dict));
                         } else {
@@ -170,17 +173,27 @@ impl PaperFlowEngine {
         pages_dict.set("Count", Object::Integer(page_kids.len() as i64));
         pages_dict.set("Kids", Object::Array(page_kids));
 
-        merged_doc.objects.insert(pages_id, Object::Dictionary(pages_dict));
+        merged_doc
+            .objects
+            .insert(pages_id, Object::Dictionary(pages_dict));
 
         let catalog_id = (max_id + 1, 0);
         let mut catalog_dict = lopdf::Dictionary::new();
         catalog_dict.set("Type", Object::Name(b"Catalog".to_vec()));
         catalog_dict.set("Pages", Object::Reference(pages_id));
 
-        merged_doc.objects.insert(catalog_id, Object::Dictionary(catalog_dict));
-        merged_doc.trailer.set("Root", Object::Reference(catalog_id));
+        merged_doc
+            .objects
+            .insert(catalog_id, Object::Dictionary(catalog_dict));
+        merged_doc
+            .trailer
+            .set("Root", Object::Reference(catalog_id));
 
-        ctx.emit_progress("Compressing and saving merged document", total_pages, total_pages);
+        ctx.emit_progress(
+            "Compressing and saving merged document",
+            total_pages,
+            total_pages,
+        );
         merged_doc.compress();
         merged_doc.save(out_path)?;
 
@@ -203,28 +216,42 @@ impl PaperFlowEngine {
             if part.contains('-') {
                 let bounds: Vec<&str> = part.split('-').collect();
                 if bounds.len() != 2 {
-                    return Err(CoreError::InvalidRange(format!("Malformed range: {}", part)));
+                    return Err(CoreError::InvalidRange(format!(
+                        "Malformed range: {}",
+                        part
+                    )));
                 }
-                let start: u32 = bounds[0].trim().parse()
-                    .map_err(|_| CoreError::InvalidRange(format!("Invalid start page in range: {}", part)))?;
-                let end: u32 = bounds[1].trim().parse()
-                    .map_err(|_| CoreError::InvalidRange(format!("Invalid end page in range: {}", part)))?;
+                let start: u32 = bounds[0].trim().parse().map_err(|_| {
+                    CoreError::InvalidRange(format!("Invalid start page in range: {}", part))
+                })?;
+                let end: u32 = bounds[1].trim().parse().map_err(|_| {
+                    CoreError::InvalidRange(format!("Invalid end page in range: {}", part))
+                })?;
 
                 if start == 0 || end == 0 {
-                    return Err(CoreError::InvalidRange("Page numbers must be 1-based (>= 1)".into()));
+                    return Err(CoreError::InvalidRange(
+                        "Page numbers must be 1-based (>= 1)".into(),
+                    ));
                 }
 
-                let (low, high) = if start <= end { (start, end) } else { (end, start) };
+                let (low, high) = if start <= end {
+                    (start, end)
+                } else {
+                    (end, start)
+                };
                 for p in low..=high {
                     if (p as usize) <= total_pages {
                         pages.push(p);
                     }
                 }
             } else {
-                let page: u32 = part.parse()
-                    .map_err(|_| CoreError::InvalidRange(format!("Invalid page number: {}", part)))?;
+                let page: u32 = part.parse().map_err(|_| {
+                    CoreError::InvalidRange(format!("Invalid page number: {}", part))
+                })?;
                 if page == 0 {
-                    return Err(CoreError::InvalidRange("Page numbers must be 1-based (>= 1)".into()));
+                    return Err(CoreError::InvalidRange(
+                        "Page numbers must be 1-based (>= 1)".into(),
+                    ));
                 }
                 if (page as usize) <= total_pages {
                     pages.push(page);
@@ -236,7 +263,9 @@ impl PaperFlowEngine {
         pages.dedup();
 
         if pages.is_empty() {
-            return Err(CoreError::InvalidRange("No valid pages found in specified range".into()));
+            return Err(CoreError::InvalidRange(
+                "No valid pages found in specified range".into(),
+            ));
         }
 
         Ok(pages)
@@ -280,20 +309,26 @@ impl PaperFlowEngine {
         }
 
         if page_kids.is_empty() {
-            return Err(CoreError::InvalidRange("No matching pages found to extract".into()));
+            return Err(CoreError::InvalidRange(
+                "No matching pages found to extract".into(),
+            ));
         }
 
         let mut pages_dict = lopdf::Dictionary::new();
         pages_dict.set("Type", Object::Name(b"Pages".to_vec()));
         pages_dict.set("Count", Object::Integer(page_kids.len() as i64));
         pages_dict.set("Kids", Object::Array(page_kids));
-        split_doc.objects.insert(pages_id, Object::Dictionary(pages_dict));
+        split_doc
+            .objects
+            .insert(pages_id, Object::Dictionary(pages_dict));
 
         let catalog_id = (max_id + 1, 0);
         let mut catalog_dict = lopdf::Dictionary::new();
         catalog_dict.set("Type", Object::Name(b"Catalog".to_vec()));
         catalog_dict.set("Pages", Object::Reference(pages_id));
-        split_doc.objects.insert(catalog_id, Object::Dictionary(catalog_dict));
+        split_doc
+            .objects
+            .insert(catalog_id, Object::Dictionary(catalog_dict));
         split_doc.trailer.set("Root", Object::Reference(catalog_id));
 
         ctx.emit_progress("Saving split document", 1, 1);
@@ -323,7 +358,10 @@ impl PaperFlowEngine {
                 page_dict.set("Rotate", Object::Integer(new_rot));
             }
         } else {
-            return Err(CoreError::InvalidRange(format!("Page {} not found", page_num)));
+            return Err(CoreError::InvalidRange(format!(
+                "Page {} not found",
+                page_num
+            )));
         }
 
         doc.save(out_path)?;

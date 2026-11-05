@@ -1,10 +1,12 @@
-use std::path::PathBuf;
 use clap::{Parser, Subcommand};
-use paperflow_core::{JobContext, PaperFlowEngine};
-use paperflow_core::compress::{Compressor, CompressionPreset};
+use paperflow_core::compress::{CompressionPreset, Compressor};
 use paperflow_core::convert::ImageConverter;
 use paperflow_core::metadata::DocumentMetadata;
-use paperflow_core::watermark::{PageNumberOptions, PageNumberPosition, WatermarkOptions, Watermarker};
+use paperflow_core::watermark::{
+    PageNumberOptions, PageNumberPosition, WatermarkOptions, Watermarker,
+};
+use paperflow_core::{JobContext, PaperFlowEngine};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "paperflow")]
@@ -106,20 +108,46 @@ fn main() -> anyhow::Result<()> {
             println!("Total pages: {}", pages);
         }
         Commands::Merge { inputs, output } => {
-            println!("Merging {} documents into {}...", inputs.len(), output.display());
+            println!(
+                "Merging {} documents into {}...",
+                inputs.len(),
+                output.display()
+            );
             let count = PaperFlowEngine::merge(&inputs, &output, &ctx)?;
-            println!("Successfully merged {} pages into {}", count, output.display());
+            println!(
+                "Successfully merged {} pages into {}",
+                count,
+                output.display()
+            );
         }
-        Commands::Split { input, ranges, output } => {
+        Commands::Split {
+            input,
+            ranges,
+            output,
+        } => {
             let total = PaperFlowEngine::get_page_count(&input)?;
             let pages_to_keep = PaperFlowEngine::parse_page_ranges(&ranges, total)?;
-            println!("Extracting {} pages from {}...", pages_to_keep.len(), input.display());
+            println!(
+                "Extracting {} pages from {}...",
+                pages_to_keep.len(),
+                input.display()
+            );
             let count = PaperFlowEngine::split_range(&input, &pages_to_keep, &output, &ctx)?;
             println!("Saved {} extracted pages to {}", count, output.display());
         }
-        Commands::Rotate { input, page, delta, output } => {
+        Commands::Rotate {
+            input,
+            page,
+            delta,
+            output,
+        } => {
             if let Some(p) = page {
-                println!("Rotating page {} by {}° in {}...", p, delta, input.display());
+                println!(
+                    "Rotating page {} by {}° in {}...",
+                    p,
+                    delta,
+                    input.display()
+                );
                 PaperFlowEngine::rotate_page(&input, p, delta, &output)?;
             } else {
                 println!("Rotating all pages by {}° in {}...", delta, input.display());
@@ -134,15 +162,25 @@ fn main() -> anyhow::Result<()> {
             println!("  Author:      {}", meta.author.as_deref().unwrap_or("—"));
             println!("  Creator:     {}", meta.creator.as_deref().unwrap_or("—"));
             println!("  Producer:    {}", meta.producer.as_deref().unwrap_or("—"));
-            println!("  Version:     PDF {}", meta.version.as_deref().unwrap_or("—"));
+            println!(
+                "  Version:     PDF {}",
+                meta.version.as_deref().unwrap_or("—")
+            );
             println!("  Pages:       {}", meta.page_count);
-            println!("  Encrypted:   {}", if meta.is_encrypted { "Yes" } else { "No" });
+            println!(
+                "  Encrypted:   {}",
+                if meta.is_encrypted { "Yes" } else { "No" }
+            );
             if let Some(clean_out) = strip_to {
                 DocumentMetadata::sanitize_and_save(&input, &clean_out)?;
                 println!("Cleared metadata saved to {}", clean_out.display());
             }
         }
-        Commands::Compress { input, output, preset } => {
+        Commands::Compress {
+            input,
+            output,
+            preset,
+        } => {
             let p = match preset.to_lowercase().as_str() {
                 "extreme" => CompressionPreset::Extreme,
                 "high" | "highquality" => CompressionPreset::HighQuality,
@@ -150,16 +188,33 @@ fn main() -> anyhow::Result<()> {
             };
             println!("Compressing {} with {} preset...", input.display(), preset);
             let (orig, comp) = Compressor::compress_file(&input, &output, p, &ctx)?;
-            let saved = if orig > 0 { ((orig - comp) as f64 / orig as f64) * 100.0 } else { 0.0 };
-            println!("Compressed {} bytes -> {} bytes ({:.1}% reduction)", orig, comp, saved);
+            let saved = if orig > 0 {
+                ((orig - comp) as f64 / orig as f64) * 100.0
+            } else {
+                0.0
+            };
+            println!(
+                "Compressed {} bytes -> {} bytes ({:.1}% reduction)",
+                orig, comp, saved
+            );
             println!("Output saved to {}", output.display());
         }
         Commands::Img2Pdf { images, output } => {
             println!("Converting {} images to PDF...", images.len());
             let count = ImageConverter::image_to_pdf(&images, &output)?;
-            println!("Created {}-page PDF document at {}", count, output.display());
+            println!(
+                "Created {}-page PDF document at {}",
+                count,
+                output.display()
+            );
         }
-        Commands::Watermark { input, text, output, size, opacity } => {
+        Commands::Watermark {
+            input,
+            text,
+            output,
+            size,
+            opacity,
+        } => {
             println!("Applying watermark '{}' to {}...", text, input.display());
             let opts = WatermarkOptions {
                 text,
@@ -169,10 +224,22 @@ fn main() -> anyhow::Result<()> {
                 color_rgb: (0.7, 0.7, 0.7),
             };
             let count = Watermarker::apply_text_watermark(&input, &output, &opts)?;
-            println!("Successfully watermarked {} pages at {}", count, output.display());
+            println!(
+                "Successfully watermarked {} pages at {}",
+                count,
+                output.display()
+            );
         }
-        Commands::PageNumbers { input, output, format } => {
-            println!("Applying page numbers ('{}') to {}...", format, input.display());
+        Commands::PageNumbers {
+            input,
+            output,
+            format,
+        } => {
+            println!(
+                "Applying page numbers ('{}') to {}...",
+                format,
+                input.display()
+            );
             let opts = PageNumberOptions {
                 format,
                 position: PageNumberPosition::BottomCenter,
@@ -182,7 +249,11 @@ fn main() -> anyhow::Result<()> {
                 color_rgb: (0.3, 0.3, 0.3),
             };
             let count = Watermarker::apply_page_numbers(&input, &output, &opts)?;
-            println!("Successfully applied page numbers to {} pages at {}", count, output.display());
+            println!(
+                "Successfully applied page numbers to {} pages at {}",
+                count,
+                output.display()
+            );
         }
     }
 

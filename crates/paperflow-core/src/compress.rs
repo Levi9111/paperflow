@@ -1,6 +1,6 @@
-use std::path::Path;
-use lopdf::Document;
 use crate::{CoreError, JobContext};
+use lopdf::Document;
+use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompressionPreset {

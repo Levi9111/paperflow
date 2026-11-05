@@ -1,5 +1,3 @@
-use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
 use paperflow_core::{
     compress::{CompressionPreset, Compressor},
     convert::ImageConverter,
@@ -7,13 +5,17 @@ use paperflow_core::{
     watermark::{PageNumberOptions, PageNumberPosition, WatermarkOptions, Watermarker},
     JobContext, PaperFlowEngine,
 };
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "android")]
 fn resolve_single_path(path: &str) -> PathBuf {
     if !path.starts_with("content://") {
         return PathBuf::from(path);
     }
-    let vm_ptr = ndk_context::android_context().vm().cast::<jni::sys::JavaVM>();
+    let vm_ptr = ndk_context::android_context()
+        .vm()
+        .cast::<jni::sys::JavaVM>();
     if !vm_ptr.is_null() {
         unsafe {
             if let Ok(vm) = jni::JavaVM::from_raw(vm_ptr) {
@@ -30,7 +32,9 @@ fn resolve_single_path(path: &str) -> PathBuf {
                                 if let Ok(obj) = val.l() {
                                     if !obj.is_null() {
                                         if let Ok(res_str) = env.get_string(&obj.into()) {
-                                            return PathBuf::from(res_str.to_string_lossy().to_string());
+                                            return PathBuf::from(
+                                                res_str.to_string_lossy().to_string(),
+                                            );
                                         }
                                     }
                                 }
@@ -137,7 +141,11 @@ fn ensure_output_dir(dir: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn cache_uploaded_file(app: tauri::AppHandle, filename: String, data: Vec<u8>) -> Result<String, String> {
+fn cache_uploaded_file(
+    app: tauri::AppHandle,
+    filename: String,
+    data: Vec<u8>,
+) -> Result<String, String> {
     use tauri::Manager;
     let cache_dir = app
         .path()
@@ -170,13 +178,17 @@ fn share_file(_app: tauri::AppHandle, path: String) -> Result<(), String> {
     {
         let local = resolve_single_path(&path);
         let path_str = local.to_string_lossy().to_string();
-        let vm_ptr = ndk_context::android_context().vm().cast::<jni::sys::JavaVM>();
+        let vm_ptr = ndk_context::android_context()
+            .vm()
+            .cast::<jni::sys::JavaVM>();
         if !vm_ptr.is_null() {
             unsafe {
                 if let Ok(vm) = jni::JavaVM::from_raw(vm_ptr) {
                     if let Ok(mut env) = vm.attach_current_thread() {
                         if let Ok(j_path) = env.new_string(&path_str) {
-                            if let Ok(class) = env.find_class("io/github/paperflow/app/MainActivity") {
+                            if let Ok(class) =
+                                env.find_class("io/github/paperflow/app/MainActivity")
+                            {
                                 let _ = env.call_static_method(
                                     class,
                                     "shareFile",
@@ -281,7 +293,7 @@ fn list_output_files(dir: String) -> Result<Vec<DocDetails>, String> {
                 && path
                     .extension()
                     .and_then(|e| e.to_str())
-                    .map_or(false, |ext| ext.eq_ignore_ascii_case("pdf"))
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("pdf"))
             {
                 if let Ok(details) = get_doc_details(path.to_string_lossy().to_string()) {
                     files.push(details);
@@ -305,7 +317,10 @@ fn pdf_merge(app: tauri::AppHandle, inputs: Vec<String>, output: String) -> Resu
 
     // Strict non-destructive safeguard: never overwrite an input document
     if input_paths.iter().any(|p| p == &out_path) {
-        return Err("Target output file cannot be the same as any input file. A new file must be created.".into());
+        return Err(
+            "Target output file cannot be the same as any input file. A new file must be created."
+                .into(),
+        );
     }
 
     if let Some(parent) = out_path.parent() {
@@ -314,20 +329,31 @@ fn pdf_merge(app: tauri::AppHandle, inputs: Vec<String>, output: String) -> Resu
         }
     }
 
-    let temp_dir = app.path().app_cache_dir().unwrap_or_else(|_| std::env::temp_dir());
+    let temp_dir = app
+        .path()
+        .app_cache_dir()
+        .unwrap_or_else(|_| std::env::temp_dir());
     let ctx = JobContext::new_noop(temp_dir);
 
     PaperFlowEngine::merge(&input_paths, &out_path, &ctx).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn pdf_split(app: tauri::AppHandle, input: String, ranges: String, output: String) -> Result<usize, String> {
+fn pdf_split(
+    app: tauri::AppHandle,
+    input: String,
+    ranges: String,
+    output: String,
+) -> Result<usize, String> {
     use tauri::Manager;
     let in_path = resolve_single_path(&input);
     let out_path = PathBuf::from(&output);
 
     if in_path == out_path {
-        return Err("Target output file cannot be the same as input file. A new file must be created.".into());
+        return Err(
+            "Target output file cannot be the same as input file. A new file must be created."
+                .into(),
+        );
     }
 
     if let Some(parent) = out_path.parent() {
@@ -336,7 +362,10 @@ fn pdf_split(app: tauri::AppHandle, input: String, ranges: String, output: Strin
         }
     }
 
-    let temp_dir = app.path().app_cache_dir().unwrap_or_else(|_| std::env::temp_dir());
+    let temp_dir = app
+        .path()
+        .app_cache_dir()
+        .unwrap_or_else(|_| std::env::temp_dir());
     let ctx = JobContext::new_noop(temp_dir);
 
     let total = PaperFlowEngine::get_page_count(&in_path).map_err(|e| e.to_string())?;
@@ -351,7 +380,10 @@ fn pdf_rotate(input: String, page: Option<u32>, delta: i64, output: String) -> R
     let out_path = PathBuf::from(&output);
 
     if in_path == out_path {
-        return Err("Target output file cannot be the same as input file. A new file must be created.".into());
+        return Err(
+            "Target output file cannot be the same as input file. A new file must be created."
+                .into(),
+        );
     }
 
     if let Some(parent) = out_path.parent() {
@@ -378,13 +410,21 @@ fn pdf_rotate_page(input: String, page: u32, angle: i64, output: String) -> Resu
 }
 
 #[tauri::command]
-fn pdf_compress(app: tauri::AppHandle, input: String, preset: String, output: String) -> Result<CompressDetails, String> {
+fn pdf_compress(
+    app: tauri::AppHandle,
+    input: String,
+    preset: String,
+    output: String,
+) -> Result<CompressDetails, String> {
     use tauri::Manager;
     let in_path = resolve_single_path(&input);
     let out_path = PathBuf::from(&output);
 
     if in_path == out_path {
-        return Err("Target output file cannot be the same as input file. A new file must be created.".into());
+        return Err(
+            "Target output file cannot be the same as input file. A new file must be created."
+                .into(),
+        );
     }
 
     if let Some(parent) = out_path.parent() {
@@ -393,7 +433,10 @@ fn pdf_compress(app: tauri::AppHandle, input: String, preset: String, output: St
         }
     }
 
-    let temp_dir = app.path().app_cache_dir().unwrap_or_else(|_| std::env::temp_dir());
+    let temp_dir = app
+        .path()
+        .app_cache_dir()
+        .unwrap_or_else(|_| std::env::temp_dir());
     let ctx = JobContext::new_noop(temp_dir);
 
     let p = match preset.to_lowercase().as_str() {
@@ -438,7 +481,10 @@ fn pdf_sanitize_meta(input: String, output: String) -> Result<(), String> {
     let out_path = PathBuf::from(&output);
 
     if in_path == out_path {
-        return Err("Target output file cannot be the same as input file. A new file must be created.".into());
+        return Err(
+            "Target output file cannot be the same as input file. A new file must be created."
+                .into(),
+        );
     }
 
     if let Some(parent) = out_path.parent() {
@@ -484,7 +530,10 @@ fn pdf_watermark(
     let out_path = PathBuf::from(&output);
 
     if in_path == out_path {
-        return Err("Target output file cannot be the same as input file. A new file must be created.".into());
+        return Err(
+            "Target output file cannot be the same as input file. A new file must be created."
+                .into(),
+        );
     }
 
     if let Some(parent) = out_path.parent() {
@@ -506,6 +555,7 @@ fn pdf_watermark(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn pdf_page_numbers(
     input: String,
     output: String,
@@ -520,7 +570,10 @@ fn pdf_page_numbers(
     let out_path = PathBuf::from(&output);
 
     if in_path == out_path {
-        return Err("Target output file cannot be the same as input file. A new file must be created.".into());
+        return Err(
+            "Target output file cannot be the same as input file. A new file must be created."
+                .into(),
+        );
     }
 
     if let Some(parent) = out_path.parent() {

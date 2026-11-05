@@ -1,6 +1,6 @@
-use std::path::Path;
-use lopdf::{Document, Object, Stream, Dictionary};
 use crate::CoreError;
+use lopdf::{Dictionary, Document, Object, Stream};
+use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub struct WatermarkOptions {
@@ -117,7 +117,7 @@ impl Watermarker {
         let escaped = escape_pdf_string(&options.text);
         let (r, g, b) = options.color_rgb;
 
-        for (_page_num, &page_id) in &pages {
+        for &page_id in pages.values() {
             // Retrieve page dimensions (MediaBox)
             let (page_w, page_h) = {
                 let p_dict = doc.get_dictionary(page_id)?;
@@ -188,7 +188,13 @@ impl Watermarker {
                 }
                 Ok(Object::Reference(orig_ref)) => {
                     let old_id = *orig_ref;
-                    page_dict.set("Contents", Object::Array(vec![Object::Reference(old_id), Object::Reference(stream_id)]));
+                    page_dict.set(
+                        "Contents",
+                        Object::Array(vec![
+                            Object::Reference(old_id),
+                            Object::Reference(stream_id),
+                        ]),
+                    );
                 }
                 _ => {
                     page_dict.set("Contents", Object::Reference(stream_id));
@@ -253,8 +259,12 @@ impl Watermarker {
 
             let (pos_x, pos_y) = match options.position {
                 PageNumberPosition::TopLeft => (m, page_h - m - options.font_size),
-                PageNumberPosition::TopCenter => (page_w / 2.0 - est_w / 2.0, page_h - m - options.font_size),
-                PageNumberPosition::TopRight => (page_w - m - est_w, page_h - m - options.font_size),
+                PageNumberPosition::TopCenter => {
+                    (page_w / 2.0 - est_w / 2.0, page_h - m - options.font_size)
+                }
+                PageNumberPosition::TopRight => {
+                    (page_w - m - est_w, page_h - m - options.font_size)
+                }
                 PageNumberPosition::BottomLeft => (m, m),
                 PageNumberPosition::BottomCenter => (page_w / 2.0 - est_w / 2.0, m),
                 PageNumberPosition::BottomRight => (page_w - m - est_w, m),
@@ -262,10 +272,7 @@ impl Watermarker {
 
             let content_str = format!(
                 "q\n/F_NUM {} Tf\n{:.3} {:.3} {:.3} rg\nBT\n{:.2} {:.2} Td\n({}) Tj\nET\nQ\n",
-                options.font_size,
-                r, g, b,
-                pos_x, pos_y,
-                escaped
+                options.font_size, r, g, b, pos_x, pos_y, escaped
             );
 
             let stream_id = (doc.max_id + 1, 0);
@@ -297,7 +304,13 @@ impl Watermarker {
                 }
                 Ok(Object::Reference(orig_ref)) => {
                     let old_id = *orig_ref;
-                    page_dict.set("Contents", Object::Array(vec![Object::Reference(old_id), Object::Reference(stream_id)]));
+                    page_dict.set(
+                        "Contents",
+                        Object::Array(vec![
+                            Object::Reference(old_id),
+                            Object::Reference(stream_id),
+                        ]),
+                    );
                 }
                 _ => {
                     page_dict.set("Contents", Object::Reference(stream_id));

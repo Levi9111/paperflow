@@ -1,11 +1,16 @@
-use std::path::PathBuf;
 use paperflow_core::{JobContext, PaperFlowEngine};
+use std::path::PathBuf;
 
 fn generate_valid_pdf(path: &PathBuf, pages: usize) {
-    let mut content = format!("%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n").into_bytes();
-    
+    let mut content =
+        format!("%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n").into_bytes();
+
     let kids: Vec<String> = (0..pages).map(|i| format!("{} 0 R", i + 3)).collect();
-    let pages_str = format!("2 0 obj\n<< /Type /Pages /Kids [{}] /Count {} >>\nendobj\n", kids.join(" "), pages);
+    let pages_str = format!(
+        "2 0 obj\n<< /Type /Pages /Kids [{}] /Count {} >>\nendobj\n",
+        kids.join(" "),
+        pages
+    );
     content.extend_from_slice(pages_str.as_bytes());
 
     for i in 0..pages {
@@ -53,7 +58,8 @@ fn test_corpus_merge_and_split() {
     assert_eq!(count_b, 3);
 
     // 2. Merge docs A and B
-    let merged_count = PaperFlowEngine::merge(&[doc_a.clone(), doc_b.clone()], &merged, &ctx).expect("Merge failed");
+    let merged_count = PaperFlowEngine::merge(&[doc_a.clone(), doc_b.clone()], &merged, &ctx)
+        .expect("Merge failed");
     assert_eq!(merged_count, 5);
 
     let verified_merged_count = PaperFlowEngine::get_page_count(&merged).expect("Count merged");
@@ -66,7 +72,8 @@ fn test_corpus_merge_and_split() {
     assert_eq!(rotated_count, 5);
 
     // 4. Split: extract pages 1 and 3
-    let split_count = PaperFlowEngine::split_range(&merged, &[1, 3], &split, &ctx).expect("Split failed");
+    let split_count =
+        PaperFlowEngine::split_range(&merged, &[1, 3], &split, &ctx).expect("Split failed");
     assert_eq!(split_count, 2);
 
     let verified_split_count = PaperFlowEngine::get_page_count(&split).expect("Count split");

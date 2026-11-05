@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
-use lopdf::{Document, Object, Stream};
 use crate::CoreError;
+use lopdf::{Document, Object, Stream};
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PageSize {
@@ -32,8 +32,9 @@ impl ImageConverter {
 
         for img_path in image_paths {
             let img_bytes = std::fs::read(img_path)?;
-            let decoded = image::load_from_memory(&img_bytes)
-                .map_err(|e| CoreError::OperationFailed(format!("Failed to decode image: {}", e)))?;
+            let decoded = image::load_from_memory(&img_bytes).map_err(|e| {
+                CoreError::OperationFailed(format!("Failed to decode image: {}", e))
+            })?;
 
             let img_w = decoded.width() as f64;
             let img_h = decoded.height() as f64;
@@ -65,7 +66,10 @@ impl ImageConverter {
             let mut page_dict = lopdf::Dictionary::new();
             page_dict.set("Type", Object::Name(b"Page".to_vec()));
             page_dict.set("Parent", Object::Reference(pages_id));
-            page_dict.set("MediaBox", Object::Array(vec![0.into(), 0.into(), box_w.into(), box_h.into()]));
+            page_dict.set(
+                "MediaBox",
+                Object::Array(vec![0.into(), 0.into(), box_w.into(), box_h.into()]),
+            );
 
             let mut xobject_dict = lopdf::Dictionary::new();
             xobject_dict.set("Im1", Object::Reference(img_obj_id));
@@ -90,7 +94,8 @@ impl ImageConverter {
         catalog_dict.set("Type", Object::Name(b"Catalog".to_vec()));
         catalog_dict.set("Pages", Object::Reference(pages_id));
 
-        doc.objects.insert(catalog_id, Object::Dictionary(catalog_dict));
+        doc.objects
+            .insert(catalog_id, Object::Dictionary(catalog_dict));
         doc.trailer.set("Root", Object::Reference(catalog_id));
         doc.max_id = max_id;
 

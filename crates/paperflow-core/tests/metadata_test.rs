@@ -14,8 +14,10 @@ fn test_metadata_extraction_and_sanitization() {
     let mut catalog_dict = lopdf::Dictionary::new();
     catalog_dict.set("Type", lopdf::Object::Name(b"Catalog".to_vec()));
     catalog_dict.set("Pages", lopdf::Object::Reference(pages_id));
-    doc.objects.insert(catalog_id, lopdf::Object::Dictionary(catalog_dict));
-    doc.trailer.set("Root", lopdf::Object::Reference(catalog_id));
+    doc.objects
+        .insert(catalog_id, lopdf::Object::Dictionary(catalog_dict));
+    doc.trailer
+        .set("Root", lopdf::Object::Reference(catalog_id));
     doc.save(&src).expect("Save base doc");
 
     // Write metadata
@@ -26,7 +28,10 @@ fn test_metadata_extraction_and_sanitization() {
 
     // Read and verify
     let read_meta = DocumentMetadata::read_from_file(&updated).expect("Read metadata");
-    assert_eq!(read_meta.title.as_deref(), Some("Confidential Quarterly Report"));
+    assert_eq!(
+        read_meta.title.as_deref(),
+        Some("Confidential Quarterly Report")
+    );
     assert_eq!(read_meta.author.as_deref(), Some("Internal Auditor"));
 
     // Sanitize (strip all metadata)

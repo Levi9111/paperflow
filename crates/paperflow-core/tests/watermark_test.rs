@@ -1,12 +1,19 @@
-use std::path::PathBuf;
-use paperflow_core::watermark::{PageNumberOptions, PageNumberPosition, WatermarkOptions, Watermarker};
+use paperflow_core::watermark::{
+    PageNumberOptions, PageNumberPosition, WatermarkOptions, Watermarker,
+};
 use paperflow_core::PaperFlowEngine;
+use std::path::PathBuf;
 
 fn generate_valid_pdf(path: &PathBuf, pages: usize) {
-    let mut content = format!("%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n").into_bytes();
-    
+    let mut content =
+        format!("%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n").into_bytes();
+
     let kids: Vec<String> = (0..pages).map(|i| format!("{} 0 R", i + 3)).collect();
-    let pages_str = format!("2 0 obj\n<< /Type /Pages /Kids [{}] /Count {} >>\nendobj\n", kids.join(" "), pages);
+    let pages_str = format!(
+        "2 0 obj\n<< /Type /Pages /Kids [{}] /Count {} >>\nendobj\n",
+        kids.join(" "),
+        pages
+    );
     content.extend_from_slice(pages_str.as_bytes());
 
     for i in 0..pages {
@@ -57,8 +64,8 @@ fn test_watermark_and_page_numbers() {
     assert!(watermarked.exists());
 
     // Verify it still parses as a valid PDF
-    let verified_count = PaperFlowEngine::get_page_count(&watermarked)
-        .expect("Failed to parse watermarked PDF");
+    let verified_count =
+        PaperFlowEngine::get_page_count(&watermarked).expect("Failed to parse watermarked PDF");
     assert_eq!(verified_count, 3);
 
     // 2. Page numbers
@@ -75,7 +82,7 @@ fn test_watermark_and_page_numbers() {
     assert_eq!(numbered_count, 3);
     assert!(numbered.exists());
 
-    let final_count = PaperFlowEngine::get_page_count(&numbered)
-        .expect("Failed to parse numbered PDF");
+    let final_count =
+        PaperFlowEngine::get_page_count(&numbered).expect("Failed to parse numbered PDF");
     assert_eq!(final_count, 3);
 }
