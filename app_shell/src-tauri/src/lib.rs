@@ -4,6 +4,7 @@ use paperflow_core::{
     compress::{CompressionPreset, Compressor},
     convert::ImageConverter,
     metadata::DocumentMetadata,
+    watermark::{PageNumberOptions, PageNumberPosition, WatermarkOptions, Watermarker},
     JobContext, PaperFlowEngine,
 };
 
@@ -97,14 +98,14 @@ fn pdf_info(path: String) -> Result<usize, String> {
 }
 
 #[tauri::command]
-fn get_default_output_dir(app: tauri::AppHandle) -> Result<String, String> {
-    use tauri::Manager;
+fn get_default_output_dir(_app: tauri::AppHandle) -> Result<String, String> {
     #[cfg(target_os = "android")]
     {
-        let base_dir = app
+        use tauri::Manager;
+        let base_dir = _app
             .path()
             .document_dir()
-            .or_else(|_| app.path().app_data_dir())
+            .or_else(|_| _app.path().app_data_dir())
             .unwrap_or_else(|_| std::env::temp_dir())
             .join("PaperFlow");
 
@@ -165,11 +166,10 @@ fn cache_uploaded_file(app: tauri::AppHandle, filename: String, data: Vec<u8>) -
 
 #[tauri::command]
 fn share_file(_app: tauri::AppHandle, path: String) -> Result<(), String> {
-    let local = resolve_single_path(&path);
-    let path_str = local.to_string_lossy().to_string();
-
     #[cfg(target_os = "android")]
     {
+        let local = resolve_single_path(&path);
+        let path_str = local.to_string_lossy().to_string();
         let vm_ptr = ndk_context::android_context().vm().cast::<jni::sys::JavaVM>();
         if !vm_ptr.is_null() {
             unsafe {
@@ -194,7 +194,7 @@ fn share_file(_app: tauri::AppHandle, path: String) -> Result<(), String> {
     }
     #[cfg(not(target_os = "android"))]
     {
-        open_folder(app, path)
+        open_folder(_app, path)
     }
 }
 
@@ -456,6 +456,101 @@ fn get_metadata(input: String) -> Result<DocumentMetadata, String> {
     DocumentMetadata::read_from_file(&in_path).map_err(|e| e.to_string())
 }
 
+fn parse_hex_color(hex: &str) -> (f64, f64, f64) {
+    let clean = hex.trim().trim_start_matches('#');
+    if clean.len() == 6 {
+        if let (Ok(r), Ok(g), Ok(b)) = (
+            u8::from_str_radix(&clean[0..2], 16),
+            u8::from_str_radix(&clean[2..4], 16),
+            u8::from_str_radix(&clean[4..6], 16),
+        ) {
+            return (r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0);
+        }
+    }
+    (0.5, 0.5, 0.5)
+}
+
+#[tauri::command]
+fn pdf_watermark(
+    input: String,
+    output: String,
+    text: String,
+    font_size: f64,
+    opacity: f64,
+    rotation: f64,
+    color_hex: String,
+) -> Result<usize, String> {
+    let in_path = resolve_single_path(&input);
+    let out_path = PathBuf::from(&output);
+
+    if in_path == out_path {
+        return Err("Target output file cannot be the same as input file. A new file must be created.".into());
+    }
+
+    if let Some(parent) = out_path.parent() {
+        if !parent.exists() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+    }
+
+    let rgb = parse_hex_color(&color_hex);
+    let opts = WatermarkOptions {
+        text,
+        font_size,
+        opacity,
+        rotation_degrees: rotation,
+        color_rgb: rgb,
+    };
+
+    Watermarker::apply_text_watermark(&in_path, &out_path, &opts).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn pdf_page_numbers(
+    input: String,
+    output: String,
+    format: String,
+    position: String,
+    font_size: f64,
+    margin: f64,
+    start_page: usize,
+    color_hex: String,
+) -> Result<usize, String> {
+    let in_path = resolve_single_path(&input);
+    let out_path = PathBuf::from(&output);
+
+    if in_path == out_path {
+        return Err("Target output file cannot be the same as input file. A new file must be created.".into());
+    }
+
+    if let Some(parent) = out_path.parent() {
+        if !parent.exists() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+    }
+
+    let pos = match position.to_lowercase().as_str() {
+        "topleft" => PageNumberPosition::TopLeft,
+        "topcenter" => PageNumberPosition::TopCenter,
+        "topright" => PageNumberPosition::TopRight,
+        "bottomleft" => PageNumberPosition::BottomLeft,
+        "bottomright" => PageNumberPosition::BottomRight,
+        _ => PageNumberPosition::BottomCenter,
+    };
+
+    let rgb = parse_hex_color(&color_hex);
+    let opts = PageNumberOptions {
+        format,
+        position: pos,
+        font_size,
+        margin,
+        start_page,
+        color_rgb: rgb,
+    };
+
+    Watermarker::apply_page_numbers(&in_path, &out_path, &opts).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -480,6 +575,8 @@ pub fn run() {
             pdf_compress,
             pdf_img2pdf,
             pdf_sanitize_meta,
+            pdf_watermark,
+            pdf_page_numbers,
             get_metadata,
             read_file_binary,
             write_file_binary,
