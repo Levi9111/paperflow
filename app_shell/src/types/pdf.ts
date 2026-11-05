@@ -34,11 +34,22 @@ export type ToolType =
   | "rotate" 
   | "compress" 
   | "img2pdf" 
+  | "watermark"
+  | "sign"
   | "inspect"
   | "viewer"
   | "history";
 
-export type ProcessedActionType = "merge" | "split" | "rotate" | "compress" | "img2pdf" | "sanitize" | "edit";
+export type ProcessedActionType = 
+  | "merge" 
+  | "split" 
+  | "rotate" 
+  | "compress" 
+  | "img2pdf" 
+  | "watermark"
+  | "sign"
+  | "sanitize" 
+  | "edit";
 
 export interface ProcessedFileRecord {
   id: string;
