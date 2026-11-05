@@ -19,6 +19,8 @@ PaperFlow is a high-performance desktop PDF management application built with a 
 - **Rotate Pages**: Rotate individual pages or whole documents by 90°, 180°, or 270° with interactive orientation preview.
 - **Smart Compression**: Optimize file size across multiple presets (`Extreme`, `Recommended`, `High Quality`).
 - **Images to PDF**: Convert JPG, PNG, and WebP images into unified PDF documents with custom page sizing presets (`Fit Image`, `A4`, `US Letter`).
+- **Watermark & Page Numbers**: Stamp diagonal or horizontal confidentiality marks (`CONFIDENTIAL`, `DRAFT`, `COPY`), company logo seals, 3x3 repeating leak-prevention grids, and official Bates page numbering (`Page 1 of 12`, `CONF-0001`) with live visual preview.
+- **Sign & Stamp**: Place executive handwritten signatures (stylus, touchscreen, or mouse) or official vector rubber stamps (`APPROVED`, `CONFIDENTIAL`, `PAID`, `VERIFIED`, `REJECTED`) with live interactive drag-and-drop positioning, tilt angles, and date stamps.
 - **Metadata Audit & Sanitization**: Inspect document version, page count, and encryption state, and wipe sensitive metadata tags with one click.
 
 ### ⚡ Desktop Experience
@@ -111,6 +113,12 @@ cargo build --release -p paperflow-cli
 
 # Inspect metadata
 ./target/release/paperflow meta -i doc.pdf
+
+# Watermark document
+./target/release/paperflow watermark -i doc.pdf -t "CONFIDENTIAL" -o marked.pdf
+
+# Add page numbers
+./target/release/paperflow page-numbers -i doc.pdf -f "Page {page} of {total}" -o numbered.pdf
 ```
 
 ---
