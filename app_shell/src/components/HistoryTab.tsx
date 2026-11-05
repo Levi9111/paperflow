@@ -194,6 +194,10 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
         return "badge-action-img2pdf";
       case "sanitize":
         return "badge-action-sanitize";
+      case "watermark":
+        return "badge-action-watermark";
+      case "sign":
+        return "badge-action-sign";
       case "edit":
         return "badge-action-edit";
       default:
@@ -254,6 +258,19 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
         );
+      case "watermark":
+        return (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+          </svg>
+        );
+      case "sign":
+        return (
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="m18 2 4 4-14 14H4v-4L18 2z" />
+            <path d="M14 6l4 4" />
+          </svg>
+        );
       case "edit":
         return (
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -275,6 +292,8 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
 
   const filterTabs = [
     { id: "all", label: "All" },
+    { id: "watermark", label: "Watermark" },
+    { id: "sign", label: "Signed" },
     { id: "edit", label: "Edited" },
     { id: "merge", label: "Merged" },
     { id: "split", label: "Split" },
