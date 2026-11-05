@@ -4,6 +4,7 @@ use paperflow_core::{JobContext, PaperFlowEngine};
 use paperflow_core::compress::{Compressor, CompressionPreset};
 use paperflow_core::convert::ImageConverter;
 use paperflow_core::metadata::DocumentMetadata;
+use paperflow_core::watermark::{PageNumberOptions, PageNumberPosition, WatermarkOptions, Watermarker};
 
 #[derive(Parser)]
 #[command(name = "paperflow")]
@@ -70,6 +71,28 @@ enum Commands {
         #[arg(short, long)]
         output: PathBuf,
     },
+    /// Apply diagonal text watermark across pages
+    Watermark {
+        #[arg(short, long)]
+        input: PathBuf,
+        #[arg(short, long, default_value = "CONFIDENTIAL")]
+        text: String,
+        #[arg(short, long)]
+        output: PathBuf,
+        #[arg(long, default_value = "48")]
+        size: f64,
+        #[arg(long, default_value = "0.3")]
+        opacity: f64,
+    },
+    /// Apply page numbering or Bates numbering
+    PageNumbers {
+        #[arg(short, long)]
+        input: PathBuf,
+        #[arg(short, long)]
+        output: PathBuf,
+        #[arg(short, long, default_value = "Page {page} of {total}")]
+        format: String,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -135,6 +158,31 @@ fn main() -> anyhow::Result<()> {
             println!("Converting {} images to PDF...", images.len());
             let count = ImageConverter::image_to_pdf(&images, &output)?;
             println!("Created {}-page PDF document at {}", count, output.display());
+        }
+        Commands::Watermark { input, text, output, size, opacity } => {
+            println!("Applying watermark '{}' to {}...", text, input.display());
+            let opts = WatermarkOptions {
+                text,
+                font_size: size,
+                opacity,
+                rotation_degrees: 45.0,
+                color_rgb: (0.7, 0.7, 0.7),
+            };
+            let count = Watermarker::apply_text_watermark(&input, &output, &opts)?;
+            println!("Successfully watermarked {} pages at {}", count, output.display());
+        }
+        Commands::PageNumbers { input, output, format } => {
+            println!("Applying page numbers ('{}') to {}...", format, input.display());
+            let opts = PageNumberOptions {
+                format,
+                position: PageNumberPosition::BottomCenter,
+                font_size: 10.0,
+                margin: 30.0,
+                start_page: 1,
+                color_rgb: (0.3, 0.3, 0.3),
+            };
+            let count = Watermarker::apply_page_numbers(&input, &output, &opts)?;
+            println!("Successfully applied page numbers to {} pages at {}", count, output.display());
         }
     }
 
