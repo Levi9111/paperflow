@@ -3677,23 +3677,32 @@ body {
 
   .sidebar-nav {
     flex-direction: row;
-    justify-content: space-around;
+    justify-content: flex-start;
     align-items: center;
     width: 100%;
-    gap: 2px;
+    gap: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 4px;
+  }
+
+  .sidebar-nav::-webkit-scrollbar {
+    display: none;
   }
 
   .nav-item {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 6px 4px;
+    padding: 6px 6px;
     font-size: 9.5px;
     gap: 2px;
-    min-width: 44px;
+    min-width: 58px;
     border-radius: var(--radius-sm);
     border: none;
-    flex: 1;
+    flex-shrink: 0;
   }
 
   .nav-item .nav-label {
