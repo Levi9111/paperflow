@@ -740,6 +740,20 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
             <div className="viewer-shortcuts">
               <button
                 className="btn-viewer-action"
+                onClick={() => onNavigateToTool("sign", filePath)}
+                title="Sign or Stamp Document"
+              >
+                Sign / Stamp
+              </button>
+              <button
+                className="btn-viewer-action"
+                onClick={() => onNavigateToTool("watermark", filePath)}
+                title="Add Watermark or Page Numbers"
+              >
+                Watermark
+              </button>
+              <button
+                className="btn-viewer-action"
                 onClick={() => onNavigateToTool("compress", filePath)}
                 title="Send to Compress"
               >
