@@ -8,6 +8,8 @@ import { DestinationSelector } from "./components/DestinationSelector";
 import { ActionFeedbackBanner, ActionFeedbackData } from "./components/ActionFeedbackBanner";
 import { HistoryTab } from "./components/HistoryTab";
 import { PdfViewer } from "./components/PdfViewer";
+import { WatermarkTab } from "./components/WatermarkTab";
+import { SignStampTab } from "./components/SignStampTab";
 import { ToastContainer, ToastMessage } from "./components/Toast";
 import { DocDetails, CompressDetails, DocumentMetadata, ToolType } from "./types/pdf";
 import {
@@ -96,6 +98,10 @@ export default function App() {
   const [inspectDoc, setInspectDoc] = useState<DocDetails | null>(null);
   const [inspectMeta, setInspectMeta] = useState<DocumentMetadata | null>(null);
   const [sanitizeOutput, setSanitizeOutput] = useState("");
+
+  // Watermark & Sign states
+  const [watermarkDoc, setWatermarkDoc] = useState<DocDetails | null>(null);
+  const [signDoc, setSignDoc] = useState<DocDetails | null>(null);
 
   // PDF Viewer state
   const [viewerPath, setViewerPath] = useState<string | null>(null);
@@ -197,6 +203,16 @@ export default function App() {
           creation_date: new Date().toLocaleDateString(),
         });
       }
+    } else if (activeTool === "watermark") {
+      const pdf = paths.find((p) => p.toLowerCase().endsWith(".pdf"));
+      if (!pdf) return;
+      const details = await loadDocDetails(pdf);
+      setWatermarkDoc(details);
+    } else if (activeTool === "sign") {
+      const pdf = paths.find((p) => p.toLowerCase().endsWith(".pdf"));
+      if (!pdf) return;
+      const details = await loadDocDetails(pdf);
+      setSignDoc(details);
     }
   };
 
@@ -226,6 +242,10 @@ export default function App() {
       } else if (tool === "merge") {
         setMergeDocs((prev) => [...prev, details]);
         setMergeOutput(generateDedicatedOutputPath(outputDir, details.filename, "merged"));
+      } else if (tool === "watermark") {
+        setWatermarkDoc(details);
+      } else if (tool === "sign") {
+        setSignDoc(details);
       }
     } catch (err) {
       console.error("Failed to load document for tool navigation:", err);
@@ -269,7 +289,7 @@ export default function App() {
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key >= "1" && e.key <= "8") {
+      if ((e.ctrlKey || e.metaKey) && e.key >= "1" && e.key <= "9") {
         e.preventDefault();
         const toolList: ToolType[] = [
           "merge",
@@ -277,6 +297,8 @@ export default function App() {
           "rotate",
           "compress",
           "img2pdf",
+          "watermark",
+          "sign",
           "inspect",
           "viewer",
           "history",
@@ -782,6 +804,27 @@ export default function App() {
       ),
     },
     {
+      id: "watermark",
+      label: "Watermark & Numbers",
+      badge: "Office",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+        </svg>
+      ),
+    },
+    {
+      id: "sign",
+      label: "Sign & Stamp",
+      badge: "Office",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="m18 2 4 4-14 14H4v-4L18 2z" />
+          <path d="M14 6l4 4" />
+        </svg>
+      ),
+    },
+    {
       id: "inspect",
       label: "Inspect & Sanitize",
       icon: (
@@ -899,6 +942,10 @@ export default function App() {
                 "Reduce PDF file size by optimizing document streams and removing redundancy."}
               {activeTool === "img2pdf" &&
                 "Convert images into a unified PDF document."}
+              {activeTool === "watermark" &&
+                "Apply confidentiality watermarks, draft stamps, and official Bates page numbering."}
+              {activeTool === "sign" &&
+                "Sign documents with touch stylus or apply official rubber stamps (Approved, Paid, Verified)."}
               {activeTool === "inspect" &&
                 "View document properties or clear author and software metadata."}
               {activeTool === "viewer" &&
@@ -1571,6 +1618,38 @@ export default function App() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* ================= WATERMARK & PAGE NUMBERS TAB ================= */}
+          {activeTool === "watermark" && (
+            <WatermarkTab
+              initialDoc={watermarkDoc}
+              outputDir={outputDir}
+              onClearDoc={() => setWatermarkDoc(null)}
+              onSelectDoc={async (path) => {
+                const details = await loadDocDetails(path);
+                setWatermarkDoc(details);
+              }}
+              onSetFeedback={setActionFeedback}
+              onShowToast={showToast}
+              onViewPdf={handleViewPdf}
+            />
+          )}
+
+          {/* ================= SIGN & STAMP TAB ================= */}
+          {activeTool === "sign" && (
+            <SignStampTab
+              initialDoc={signDoc}
+              outputDir={outputDir}
+              onClearDoc={() => setSignDoc(null)}
+              onSelectDoc={async (path) => {
+                const details = await loadDocDetails(path);
+                setSignDoc(details);
+              }}
+              onSetFeedback={setActionFeedback}
+              onShowToast={showToast}
+              onViewPdf={handleViewPdf}
+            />
           )}
 
           {/* ================= PDF VIEWER TAB ================= */}
